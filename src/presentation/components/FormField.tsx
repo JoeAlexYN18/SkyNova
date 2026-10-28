@@ -10,11 +10,7 @@ interface FormFieldProps {
   rightOfLabel?: React.ReactNode;
 }
 
-/**
- * Shared wrapper for every input: uppercase label on top, the input itself,
- * and (when present) a red inline error message below — this is what makes
- * "validaciones con mensajes debajo del input" consistent across the form.
- */
+
 export function FormField({ label, error, children, rightOfLabel }: FormFieldProps) {
   return (
     <View style={styles.container}>

@@ -1,7 +1,4 @@
-/**
- * Every user-facing validation/feedback string lives here. Centralizing copy
- * makes it trivial to keep tone consistent or add i18n later.
- */
+
 export const MESSAGES = {
   REQUIRED: 'Este campo es obligatorio.',
   INVALID_FULL_NAME: 'El nombre debe tener entre 2 y 100 caracteres.',

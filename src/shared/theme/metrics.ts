@@ -1,7 +1,4 @@
-/**
- * Spacing and radius scale. Keep multiples of 4 so paddings/margins line up
- * consistently across every screen.
- */
+
 export const spacing = {
   xs: 4,
   sm: 8,

@@ -1,8 +1,4 @@
-/**
- * Type scale for the app. Uses the OS default system font (no custom font
- * loading required) so it stays consistent with "only what React Native
- * offers" and avoids an extra expo-font dependency.
- */
+
 export const typography = {
   badge: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.6 },
   title: { fontSize: 24, fontWeight: '700' as const, letterSpacing: 0.1 },

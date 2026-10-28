@@ -5,12 +5,8 @@ import { DEMO_CREDENTIALS } from '@/infrastructure/data/demoCredentials';
 
 type StoredUser = User & { password: string };
 
-/**
- * In-memory implementation of the user repository for the current demo.
- * Replace its binding in `infrastructure/container.ts` to use a real backend.
- */
+
 export class InMemoryUserRepository implements IUserRepository {
-  // Local-only account so the login flow can be exercised before an API exists.
   private users: StoredUser[] = [{
     id: 'demo-user',
     fullName: 'Alex Valdivia',

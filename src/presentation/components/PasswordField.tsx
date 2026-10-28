@@ -14,7 +14,7 @@ interface PasswordFieldProps {
   error?: string;
   autoComplete?: TextInputProps['autoComplete'];
   rightOfLabel?: React.ReactNode;
-  /** Show the 4-bar strength meter (used for the main password, not the confirm field). */
+
   showStrength?: boolean;
 }
 

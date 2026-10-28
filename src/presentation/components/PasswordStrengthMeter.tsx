@@ -15,7 +15,7 @@ const COLOR_BY_KEY: Record<PasswordStrength['colorKey'], string> = {
   success: colors.success,
 };
 
-/** Shows the current password-length level beside its field label. */
+
 export function PasswordStrengthLabel({ score, colorKey }: PasswordStrength) {
   if (score === 0) return null;
   const activeColor = COLOR_BY_KEY[colorKey];
@@ -31,7 +31,7 @@ export function PasswordStrengthLabel({ score, colorKey }: PasswordStrength) {
   );
 }
 
-/** Shows the current password-length level beside its field label. */
+
 export function PasswordStrengthBars({ score, colorKey }: PasswordStrength) {
   const activeColor = COLOR_BY_KEY[colorKey];
   return (

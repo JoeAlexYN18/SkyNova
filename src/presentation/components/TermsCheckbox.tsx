@@ -9,7 +9,6 @@ interface TermsCheckboxProps {
   error?: string;
 }
 
-// TODO: point these at your real, published Terms/Privacy pages.
 const TERMS_URL = 'https://skynova.aero/terminos-de-servicio';
 const PRIVACY_URL = 'https://skynova.aero/politica-de-privacidad';
 

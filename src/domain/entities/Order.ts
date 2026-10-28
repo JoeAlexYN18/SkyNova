@@ -22,7 +22,6 @@ export interface OrderItemSnapshot {
   unitPrice: number;
 }
 
-/** In-memory shape follows orders/order_items and addresses in schema.sql. */
 export interface Order {
   id: string;
   userId: string;

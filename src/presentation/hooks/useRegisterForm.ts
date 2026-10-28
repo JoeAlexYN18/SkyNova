@@ -24,7 +24,7 @@ import {
   validateUsername,
 } from '@/shared/validators/formValidators';
 
-/** Runs every field validator and returns only the fields that failed. */
+
 function validateAllFields(values: RegisterFormValues): RegisterFormErrors {
   const errors: RegisterFormErrors = {
     fullName: validateFullName(values.fullName),

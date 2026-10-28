@@ -24,11 +24,7 @@ interface TextFieldProps {
   rightElement?: React.ReactNode;
 }
 
-/**
- * Reusable text input used for name/email/username and (via PasswordField)
- * the password inputs. Highlights its border on focus and in red on error,
- * for clear, consistent visual feedback across the whole form.
- */
+
 export function TextField({
   label,
   icon,

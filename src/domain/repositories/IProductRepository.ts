@@ -31,7 +31,7 @@ export interface HomeProductCollections {
   bestSellingAccessories: Product[];
 }
 
-/** Data access contract; a future API adapter can replace the local adapter. */
+
 export interface IProductRepository {
   listCategories(): Promise<ProductCategory[]>;
   listBrands(): Promise<ProductBrand[]>;

@@ -18,9 +18,6 @@ interface LoginFormState {
 
 export function useLoginForm() {
   const [state, setState] = useState<LoginFormState>({
-    // The app currently uses an in-memory repository. Pre-fill its demo
-    // account so the primary button has a working path before registration
-    // or a backend is available; users can still replace either value.
     identifier: DEMO_CREDENTIALS.username,
     password: DEMO_CREDENTIALS.password,
     errors: {},

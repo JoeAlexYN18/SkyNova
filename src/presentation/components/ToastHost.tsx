@@ -17,10 +17,7 @@ const COLOR_BY_TYPE = {
   info: colors.info,
 };
 
-/**
- * Renders the banner driven by `ToastContext`. Mount it once near the root
- * (see App.tsx) — any screen can then trigger it via `useToast().show(...)`.
- */
+
 export function ToastHost() {
   const { toast } = useToast();
   const insets = useSafeAreaInsets();

@@ -1,5 +1,3 @@
--- Esquema inicial para SkyNova (PostgreSQL 13+).
--- gen_random_uuid() está disponible en PostgreSQL moderno sin extensión adicional.
 
 CREATE TABLE users (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -14,7 +12,6 @@ CREATE TABLE users (
     updated_at      timestamptz NOT NULL DEFAULT now()
 );
 
--- Evitan duplicados ignorando mayúsculas/minúsculas; la aplicación guarda email normalizado.
 CREATE UNIQUE INDEX users_email_lower_uq ON users (lower(email));
 CREATE UNIQUE INDEX users_username_lower_uq ON users (lower(username));
 ALTER TABLE users ADD CONSTRAINT users_email_format_ck
@@ -81,7 +78,6 @@ CREATE TABLE drone_specs (
 );
 CREATE INDEX drone_specs_max_flight_idx ON drone_specs (max_flight_minutes);
 
--- Imágenes desacopladas del producto: un producto puede tener varias y solo una principal.
 CREATE TABLE product_images (
     id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     product_id     uuid NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -95,7 +91,6 @@ CREATE TABLE product_images (
 CREATE UNIQUE INDEX product_images_one_primary_per_product_uq
     ON product_images (product_id) WHERE is_primary;
 
--- Ratings are stored per user; average and count are calculated for catalog sorting.
 CREATE TABLE product_reviews (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     product_id  uuid NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -107,7 +102,6 @@ CREATE TABLE product_reviews (
 );
 CREATE INDEX product_reviews_product_rating_idx ON product_reviews (product_id, rating);
 
--- Una cesta activa por usuario; sus artículos referencian productos del catálogo.
 CREATE TABLE carts (
     id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id    uuid NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,

@@ -1,6 +1,6 @@
 import type { ProductBrand } from '@/domain/entities/Product';
 
-/** Shared brand directory for the Home brand strip and the Catalog filter. */
+
 export const OFFICIAL_BRANDS: ProductBrand[] = [
   { name: 'DJI', color: '#22D3EE' },
   { name: 'Autel Robotics', color: '#588BFF' },
@@ -13,7 +13,7 @@ export const OFFICIAL_BRANDS: ProductBrand[] = [
 
 const fallbackColors = ['#22D3EE', '#588BFF', '#65D6A6', '#FFAA78', '#9C83FF'];
 
-/** Keeps the recognized list and any brand present in the current product catalog in sync. */
+
 export function mergeCatalogBrands(productBrandNames: string[]): ProductBrand[] {
   const brands = new Map(OFFICIAL_BRANDS.map((brand) => [brand.name.toLocaleLowerCase(), brand]));
 

@@ -50,16 +50,12 @@ export function LoginScreen() {
     if (actionStarted.current || isStarting || isFlying) return;
     actionStarted.current = true;
     setIsStarting(true);
-    // Show immediate feedback on touch, while credentials are checked.
     setIsFlying(true);
     try {
-      // Try the values shown in the fields first. In this no-backend demo,
-      // fall back to the seeded account so the main CTA always has a valid path.
       const authenticated = await submit();
       if (!authenticated) {
         await login(DEMO_CREDENTIALS.email, DEMO_CREDENTIALS.password);
       }
-      // Keep the logo flight visible for its full duration, then enter Home.
       setTimeout(() => router.replace('/home' as never), 1500);
     } catch {
       setIsFlying(false);

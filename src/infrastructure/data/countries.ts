@@ -1,12 +1,6 @@
 import { Country } from '../../domain/entities/Country';
 
-/**
- * Static country + dial-code catalogue. `fetchCountries()` simulates the
- * network call a real `/countries` endpoint would make, so the hook that
- * consumes it (`useCountries`) already behaves like it's talking to an API.
- * Swap the body of `fetchCountries` for a real `fetch(...)` later — the
- * rest of the app does not change.
- */
+
 export const COUNTRIES: Country[] = [
   { code: 'MX', name: 'México', dialCode: '+52', flag: '🇲🇽' },
   { code: 'US', name: 'Estados Unidos', dialCode: '+1', flag: '🇺🇸' },
@@ -65,7 +59,7 @@ export const COUNTRIES: Country[] = [
 export const DEFAULT_COUNTRY: Country =
   COUNTRIES.find((c) => c.code === 'MX') ?? COUNTRIES[0];
 
-/** Simulates a GET /countries network call (~500ms latency). */
+
 export function fetchCountries(): Promise<Country[]> {
   return new Promise((resolve) => {
     setTimeout(() => resolve(COUNTRIES), 500);

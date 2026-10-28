@@ -8,7 +8,7 @@ export class InvalidCredentialsError extends Error {
   }
 }
 
-/** Authenticates by email or username without exposing which value was wrong. */
+
 export async function authenticateUser(
   repository: IUserRepository,
   identifier: string,

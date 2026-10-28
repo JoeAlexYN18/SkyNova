@@ -14,10 +14,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-/**
- * App-wide auth/session state. The repository can be injected in tests and
- * swapped in the infrastructure container when a real backend is added.
- */
+
 interface AuthProviderProps {
   children: React.ReactNode;
   repository?: IUserRepository;

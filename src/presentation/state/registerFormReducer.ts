@@ -46,9 +46,7 @@ export function buildInitialRegisterFormState(
   };
 }
 
-/**
- * Owns registration form values, validation errors, and submit state.
- */
+
 export function registerFormReducer(
   state: RegisterFormState,
   action: RegisterFormAction

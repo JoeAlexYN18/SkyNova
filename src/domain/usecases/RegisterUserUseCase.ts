@@ -15,12 +15,7 @@ export class UsernameTakenError extends Error {
   }
 }
 
-/**
- * Business rule for registration, independent of React or any UI concern:
- * email and username must be unique before a user is created. Written
- * against the `IUserRepository` port, so it works unchanged whether the
- * repository is the in-memory one or a future real API.
- */
+
 export async function registerUser(
   repository: IUserRepository,
   input: NewUserInput

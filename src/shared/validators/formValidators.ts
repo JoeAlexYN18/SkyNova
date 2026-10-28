@@ -1,7 +1,7 @@
 import { isPossiblePhoneNumber, isSupportedCountry, type CountryCode } from 'libphonenumber-js';
 import { MESSAGES } from '../constants/messages';
 
-/** Shared required-field check; passwords use an exact empty check instead. */
+
 export const isRequired = (value: string): boolean => value.trim().length > 0;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -60,7 +60,7 @@ export interface PasswordStrength {
   colorKey: 'muted' | 'danger' | 'warning' | 'info' | 'success';
 }
 
-/** Measures passphrase length without imposing character-class requirements. */
+
 export function getPasswordStrength(value: string): PasswordStrength {
   const length = Array.from(value).length;
   if (!length) return { score: 0, colorKey: 'muted' };

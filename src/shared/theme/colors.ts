@@ -1,8 +1,4 @@
-/**
- * Central color palette for the SkyNova app.
- * Every screen/component reads from here instead of hardcoding hex values,
- * so the whole app stays visually consistent and easy to re-theme later.
- */
+
 export const colors = {
   background: '#070B14',
   surface: '#121A2C',
