@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Product, ProductBrand, ProductCategory } from '@/domain/entities/Product';
+import type { ProductSort } from '@/domain/repositories/IProductRepository';
 import { colors } from '@/shared/theme';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
 
@@ -21,6 +22,9 @@ export type CatalogEntryOptions = {
   categoryId?: string;
   brand?: string;
   openFilters?: boolean;
+  productGroup?: 'drones' | 'accessories';
+  isFeatured?: boolean;
+  sortBy?: ProductSort;
 };
 
 type CatalogNavigation = (filters?: CatalogEntryOptions) => void;
@@ -105,7 +109,7 @@ export function HomeFeed({
         products={featured}
         onAdd={onAddProduct}
         onOpen={onOpenProduct}
-        onViewAll={onNavigateCatalog}
+        onViewAll={() => onNavigateCatalog({ productGroup: 'drones', isFeatured: true })}
         emptyText="No encontramos drones con esos filtros."
       />
       <View style={[styles.sectionHeading, styles.accessoryHeading]}>
@@ -114,7 +118,7 @@ export function HomeFeed({
           <Text style={styles.sectionTitle}>más vendidos</Text>
           <Text style={styles.sectionSubtitle}>Lo esencial para mantener tu flota lista</Text>
         </View>
-        <TouchableOpacity onPress={() => onNavigateCatalog()} accessibilityRole="link">
+        <TouchableOpacity onPress={() => onNavigateCatalog({ productGroup: 'accessories', sortBy: 'best_selling' })} accessibilityRole="link">
           <Text style={styles.smallLink}>VER TODOS</Text>
         </TouchableOpacity>
       </View>

@@ -68,7 +68,7 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct }: Props) {
         </View>
       </View>)}
       <View style={styles.cartSummary}>
-        <View style={styles.cartSummaryRow}><Text style={styles.cartSummaryLabel}>Subtotal</Text><Text style={styles.cartSummaryValue}>{money(subtotal, currency)}</Text></View>
+        <View style={styles.cartSummaryRow}><Text style={styles.cartSummaryLabel}>Total</Text><Text style={styles.cartSummaryValue}>{money(subtotal, currency)}</Text></View>
         <Text style={styles.cartDemoNote}>El envío se coordina al confirmar. Pago de demostración, sin cargos reales.</Text>
         <TouchableOpacity onPress={() => setCheckoutOpen(true)} style={styles.checkoutButton}><Text style={styles.checkoutButtonText}>Continuar con el pedido</Text><MaterialCommunityIcons name="arrow-right" size={18} color={colors.onPrimary} /></TouchableOpacity>
       </View>
@@ -80,7 +80,7 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct }: Props) {
           {([['recipient', 'Nombre de quien recibe'], ['phone', 'Teléfono'], ['line1', 'Dirección'], ['city', 'Ciudad'], ['region', 'Departamento (opcional)'], ['postalCode', 'Código postal (opcional)'], ['countryCode', 'País (código de 2 letras)']] as const).map(([key, label]) => <View key={key} style={styles.checkoutField}>
             <Text style={styles.checkoutLabel}>{label}</Text><TextInput value={address[key]} onChangeText={(value) => update(key, key === 'countryCode' ? value.toUpperCase().slice(0, 2) : value)} placeholder={label} placeholderTextColor={colors.placeholder} autoCapitalize={key === 'countryCode' ? 'characters' : 'words'} style={styles.checkoutInput} />
           </View>)}
-          <TouchableOpacity disabled={!canSubmit} onPress={submitOrder} style={[styles.checkoutButton, !canSubmit && styles.checkoutButtonDisabled]}><Text style={styles.checkoutButtonText}>Confirmar pedido de prueba · {money(subtotal, currency)}</Text></TouchableOpacity>
+          <TouchableOpacity disabled={!canSubmit} onPress={submitOrder} style={[styles.checkoutButton, !canSubmit && styles.checkoutButtonDisabled]}><Text style={styles.checkoutButtonText}>Confirmar pedido · {money(subtotal, currency)}</Text></TouchableOpacity>
         </ScrollView>
       </View></View>
     </Modal>

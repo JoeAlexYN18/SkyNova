@@ -14,15 +14,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Product, ProductBrand, ProductCategory, ProductType } from '@/domain/entities/Product';
 import type { ProductPage, ProductSort } from '@/domain/repositories/IProductRepository';
 import { productRepository } from '@/infrastructure/container';
-import { ProductListItem } from '@/presentation/components/HomeFeed';
+import { ProductListItem, type CatalogEntryOptions } from '@/presentation/components/HomeFeed';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
 import { colors } from '@/shared/theme';
 
-export type CatalogInitialFilters = {
-  search?: string;
-  categoryId?: string;
-  brand?: string;
-};
+export type CatalogInitialFilters = Omit<CatalogEntryOptions, 'openFilters'>;
 
 type CatalogFeedProps = {
   initialFilters: CatalogInitialFilters;
@@ -64,14 +60,14 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [brands, setBrands] = useState<ProductBrand[]>([]);
   const [search, setSearch] = useState(initialFilters.search ?? '');
-  const [selectedGroup, setSelectedGroup] = useState<CatalogGroup | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<CatalogGroup | null>(initialFilters.productGroup ?? null);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(() => initialFilters.categoryId ? [initialFilters.categoryId] : []);
   const [brand, setBrand] = useState<string | undefined>(initialFilters.brand);
   const [budgetRangeId, setBudgetRangeId] = useState<string>('all');
   const [minFlightMinutes, setMinFlightMinutes] = useState<number | undefined>();
   const [isOfferOnly, setIsOfferOnly] = useState(false);
-  const [isFeaturedOnly, setIsFeaturedOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<ProductSort>('relevance');
+  const [isFeaturedOnly, setIsFeaturedOnly] = useState(initialFilters.isFeatured ?? false);
+  const [sortBy, setSortBy] = useState<ProductSort>(initialFilters.sortBy ?? 'relevance');
   const [typeCounts, setTypeCounts] = useState<TypeCounts>(EMPTY_COUNTS);
   const [pageResult, setPageResult] = useState<ProductPage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
