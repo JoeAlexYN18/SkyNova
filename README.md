@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ﻿# SkyNova
 
 Aplicación Expo para el registro de usuarios. La ruta principal `/` muestra el formulario; el login se añadirá después.
@@ -18,3 +19,7 @@ El proyecto usa Expo SDK 58. Las rutas viven en `src/app/`; el layout raíz conf
 - `src/shared/`: tema, validadores, mensajes y utilidades compartidas.
 
 `AuthProvider` acepta un repositorio por propiedad para facilitar pruebas aisladas. Los usuarios de la implementación actual solo viven en memoria y se pierden al reiniciar la app.
+=======
+# SkyNova
+App móvil para un negocio llamado SkyNova que se dedica a comercializar drones junto con accesorios y repuestos.
+>>>>>>> 60b769bac7a3c96cf5bfb6ad9d6339c2628e7cd7
