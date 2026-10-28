@@ -98,6 +98,8 @@ export const styles = StyleSheet.create({
   filterOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
   filterOptionLabel: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   filterOptionText: { color: colors.textPrimary, fontSize: 15, fontWeight: '600' },
+  applyFiltersButton: { alignItems: 'center', justifyContent: 'center', minHeight: 46, marginTop: spacing.md, borderRadius: radius.md, backgroundColor: colors.primary },
+  applyFiltersText: { color: colors.onPrimary, fontSize: 14, fontWeight: '800' },
   clearFiltersButton: { alignItems: 'center', justifyContent: 'center', minHeight: 44, marginTop: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   clearFiltersText: { color: colors.primary, fontSize: 14, fontWeight: '800' },
   featureCard: { minHeight: 144, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },

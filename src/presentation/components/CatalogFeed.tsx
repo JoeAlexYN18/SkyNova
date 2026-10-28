@@ -222,7 +222,7 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
 
   const clearFilters = () => {
     setSelectedGroup(null);
-      setSelectedCategoryIds([]);
+    setSelectedCategoryIds([]);
     setBrand(undefined);
     setBudgetRangeId('all');
     setMinFlightMinutes(undefined);
@@ -456,6 +456,13 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
                 </>
               )}
             </ScrollView>
+            <TouchableOpacity
+              style={styles.applyFiltersButton}
+              onPress={() => setIsFilterVisible(false)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.applyFiltersText}>Aplicar filtros</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
               <Text style={styles.clearFiltersText}>Limpiar filtros</Text>
             </TouchableOpacity>

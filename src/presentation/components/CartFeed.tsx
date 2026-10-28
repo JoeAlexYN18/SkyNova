@@ -34,7 +34,7 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct }: Props) {
     createDemoOrder(currentUser, lines, address);
     clearCart();
     setCheckoutOpen(false);
-    show('Pedido de prueba creado. No se realizó ningún cobro.', 'success');
+    show('Pedido creado.', 'success');
   };
 
   return <View style={styles.cartPage}>
