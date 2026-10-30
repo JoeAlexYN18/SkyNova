@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Redirect } from 'expo-router';
-import { Alert, ScrollView, StatusBar, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, BackHandler, Easing, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Product, ProductBrand, ProductCategory } from '@/domain/entities/Product';
@@ -18,6 +18,7 @@ import { ProductDetailModal } from '@/presentation/components/ProductDetailModal
 import { HomeFeed, type CatalogEntryOptions } from '@/presentation/components/HomeFeed';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
 import { colors } from '@/shared/theme';
+import { formatCurrency } from '@/shared/utils/formatCurrency';
 
 type Section = 'Inicio' | 'Catálogo' | 'Carrito' | 'Perfil';
 export function HomeScreen() {
@@ -34,6 +35,29 @@ export function HomeScreen() {
   const [section, setSection] = useState<Section>('Inicio');
   const [catalogInitialFilters, setCatalogInitialFilters] = useState<CatalogInitialFilters>({});
   const [openCatalogFilters, setOpenCatalogFilters] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutFlight] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      BackHandler.exitApp();
+      return true;
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    Animated.timing(logoutFlight, {
+      toValue: 1,
+      duration: 1100,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) logout();
+    });
+  }, [isLoggingOut, logout, logoutFlight]);
 
   const navigateToCatalog = useCallback((options: CatalogEntryOptions = {}) => {
     const { openFilters = false, ...filters } = options;
@@ -65,13 +89,18 @@ export function HomeScreen() {
     return () => { active = false; };
   }, []);
 
+  const userOrders = useMemo(
+    () => currentUser
+      ? orders
+        .filter((order) => order.userId === currentUser.id && order.status !== 'cancelled')
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      : [],
+    [orders, currentUser],
+  );
+
   if (!currentUser) return <Redirect href={'/login' as never} />;
 
   const firstName = currentUser.fullName.trim().split(/\s+/)[0];
-  const userOrders = orders
-    .filter((order) => order.userId === currentUser.id && order.status !== 'cancelled')
-    .slice()
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const unreadOrders = unreadOrderCount(currentUser.id);
 
   const toggleOrderHistory = () => {
@@ -148,7 +177,7 @@ export function HomeScreen() {
               </View>)}
             </View>}
             <View style={styles.profileDivider} />
-            <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} disabled={isLoggingOut}>
               <MaterialCommunityIcons name="logout" size={19} color={colors.danger} /><Text style={styles.logoutText}>Cerrar sesión</Text>
             </TouchableOpacity>
           </View>
@@ -184,10 +213,43 @@ export function HomeScreen() {
           navigateToSection('Carrito');
         }}
       />
+      {isLoggingOut && (
+        <Modal visible transparent={false} animationType="none" statusBarTranslucent onRequestClose={() => {}}>
+        <View style={logoutStyles.overlay}>
+          <Animated.View
+            style={{
+              opacity: logoutFlight.interpolate({ inputRange: [0, 0.15, 0.85, 1], outputRange: [0, 1, 1, 1] }),
+              transform: [
+                { translateY: logoutFlight.interpolate({ inputRange: [0, 1], outputRange: [-100, 140] }) },
+                { translateX: logoutFlight.interpolate({ inputRange: [0, 0.5, 1], outputRange: [45, -20, -65] }) },
+                { scale: logoutFlight.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0.7, 1.2, 0.65] }) },
+                { rotate: logoutFlight.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['14deg', '-10deg', '18deg'] }) },
+              ],
+            }}
+          >
+            <MaterialCommunityIcons name="quadcopter" size={100} color={colors.primary} />
+          </Animated.View>
+          <Text style={logoutStyles.label}>CERRANDO SESIÓN</Text>
+          <Text style={logoutStyles.brand}>SkyNova</Text>
+        </View>
+        </Modal>
+      )}
 
     </SafeAreaView>
   );
 }
+
+const logoutStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  label: { color: colors.primary, fontSize: 12, fontWeight: '800', letterSpacing: 2, marginTop: 28 },
+  brand: { color: colors.textPrimary, fontSize: 28, fontWeight: '800', marginTop: 8 },
+});
 
 function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const labels: Record<OrderStatus, string> = {
@@ -212,5 +274,5 @@ function OrderStatusBadge({ status }: { status: OrderStatus }) {
 
 function formatOrderTotal(items: { quantity: number; unitPrice: number }[], currency: string) {
   const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  return new Intl.NumberFormat('es-CO', { style: 'currency', currency, maximumFractionDigits: 0 }).format(total);
+  return formatCurrency(total, currency);
 }
