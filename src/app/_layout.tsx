@@ -5,6 +5,7 @@ import { AuthProvider } from '@/infrastructure/context/AuthContext';
 import { ToastHost } from '@/presentation/components/ToastHost';
 import { CartProvider } from '@/infrastructure/context/CartContext';
 import { OrderProvider } from '@/infrastructure/context/OrderContext';
+import { colors } from '@/shared/theme';
 
 export default function RootLayout() {
   return (
@@ -12,7 +13,13 @@ export default function RootLayout() {
       <AuthProvider>
         <CartProvider>
           <OrderProvider>
-            <Stack screenOptions={{ headerShown: false }} />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                animation: 'fade',
+                contentStyle: { backgroundColor: colors.background },
+              }}
+            />
             <ToastHost />
           </OrderProvider>
         </CartProvider>
