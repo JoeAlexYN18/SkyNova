@@ -49,7 +49,7 @@ export function useRegisterForm(defaultCountry: Country) {
     defaultCountry,
     buildInitialRegisterFormState
   );
-  const { register } = useAuth();
+  const { register, logout } = useAuth();
   const { show } = useToast();
 
   const setField = useCallback(
@@ -82,6 +82,7 @@ export function useRegisterForm(defaultCountry: Country) {
         password: state.values.password,
       });
 
+      logout();
       show(MESSAGES.REGISTER_SUCCESS, 'success');
       dispatch({ type: 'RESET', initialValues: buildInitialRegisterFormState(defaultCountry).values });
       return true;
@@ -97,7 +98,7 @@ export function useRegisterForm(defaultCountry: Country) {
     } finally {
       dispatch({ type: 'SET_SUBMITTING', isSubmitting: false });
     }
-  }, [state.values, register, show, defaultCountry]);
+  }, [state.values, register, logout, show, defaultCountry]);
 
   return { state, setField, submit };
 }
