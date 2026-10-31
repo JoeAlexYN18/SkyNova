@@ -10,6 +10,7 @@ interface AuthContextValue {
   register: (input: NewUserInput) => Promise<User>;
   login: (identifier: string, password: string) => Promise<User>;
   logout: () => void;
+  resetPassword: (identifier: string, newPassword: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -36,10 +37,14 @@ export function AuthProvider({ children, repository = userRepository }: AuthProv
   }, [repository]);
 
   const logout = useCallback(() => setCurrentUser(null), []);
+  const resetPassword = useCallback(
+    (identifier: string, newPassword: string) => repository.resetPassword(identifier, newPassword),
+    [repository]
+  );
 
   const value = useMemo(
-    () => ({ currentUser, register, login, logout }),
-    [currentUser, register, login, logout]
+    () => ({ currentUser, register, login, logout, resetPassword }),
+    [currentUser, register, login, logout, resetPassword]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
