@@ -1,5 +1,5 @@
 import { NewUserInput, User } from '@/domain/entities/User';
-import { IUserRepository } from '@/domain/repositories/IUserRepository';
+import { AuthenticationResult, IUserRepository } from '@/domain/repositories/IUserRepository';
 import { generateId } from '@/shared/utils/generateId';
 import { DEMO_CREDENTIALS } from '@/infrastructure/data/demoCredentials';
 
@@ -27,17 +27,16 @@ export class InMemoryUserRepository implements IUserRepository {
     return this.toPublicUser(user);
   }
 
-  async authenticate(identifier: string, password: string): Promise<User | null> {
-    const normalizedIdentifier = identifier.trim();
-    const user = normalizedIdentifier.includes('@')
-      ? this.users.find(
-          (candidate) => candidate.email.toLowerCase() === normalizedIdentifier.toLowerCase()
-        )
-      : this.users.find(
-          (candidate) => candidate.username.toLowerCase() === normalizedIdentifier.toLowerCase()
-        );
+  async authenticate(identifier: string, password: string): Promise<AuthenticationResult> {
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+    const user = this.users.find((candidate) =>
+      candidate.email.toLowerCase() === normalizedIdentifier ||
+      candidate.username.toLowerCase() === normalizedIdentifier
+    );
 
-    return user?.password === password ? this.toPublicUser(user) : null;
+    if (!user) return { status: 'identifier_not_found' };
+    if (user.password !== password) return { status: 'invalid_password' };
+    return { status: 'success', user: this.toPublicUser(user) };
   }
 
   async findByEmail(email: string): Promise<User | null> {
@@ -55,6 +54,17 @@ export class InMemoryUserRepository implements IUserRepository {
     return found ? this.toPublicUser(found) : null;
   }
 
+  async resetPassword(identifier: string, newPassword: string): Promise<boolean> {
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+    const user = this.users.find((candidate) =>
+      candidate.email.toLowerCase() === normalizedIdentifier ||
+      candidate.username.toLowerCase() === normalizedIdentifier
+    );
+    if (!user) return false;
+    user.password = newPassword;
+    return true;
+  }
+
   private toPublicUser(user: StoredUser): User {
     return {
       id: user.id,
@@ -66,5 +76,4 @@ export class InMemoryUserRepository implements IUserRepository {
     };
   }
 }
-
 
