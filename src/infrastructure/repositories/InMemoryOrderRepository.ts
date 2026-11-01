@@ -1,3 +1,5 @@
+// Improvement 6
+
 import type { Order } from '@/domain/entities/Order';
 import type { IOrderRepository, NewOrderInput, OrderUpdate } from '@/domain/repositories/IOrderRepository';
 import { generateId } from '@/shared/utils/generateId';
@@ -83,13 +85,16 @@ export class InMemoryOrderRepository implements IOrderRepository {
 
 function validateItems(input: NewOrderInput) {
   if (input.items.length === 0) throw new Error('No se puede crear un pedido sin productos.');
+  if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error('La moneda del pedido no es válida.');
   const skus = new Set<string>();
   for (const item of input.items) {
-    if (skus.has(item.sku)) throw new Error('El pedido contiene productos duplicados.');
-    if (!Number.isInteger(item.quantity) || item.quantity <= 0 || item.unitPrice < 0) {
+    if (skus.has(item.sku.trim().toLowerCase())) throw new Error('El pedido contiene productos duplicados.');
+    if (!item.productId.trim() || !item.productName.trim() || !item.sku.trim()
+      || !Number.isSafeInteger(item.quantity) || item.quantity <= 0
+      || !Number.isFinite(item.unitPrice) || item.unitPrice < 0) {
       throw new Error('Los productos del pedido tienen datos inválidos.');
     }
-    skus.add(item.sku);
+    skus.add(item.sku.trim().toLowerCase());
   }
 }
 
