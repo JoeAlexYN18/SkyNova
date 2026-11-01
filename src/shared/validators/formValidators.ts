@@ -1,4 +1,11 @@
-import { isPossiblePhoneNumber, isSupportedCountry, type CountryCode } from 'libphonenumber-js';
+// Improvement 13
+
+import {
+  isPossiblePhoneNumber,
+  isSupportedCountry,
+  parsePhoneNumberFromString,
+  type CountryCode,
+} from 'libphonenumber-js';
 import { MESSAGES } from '../constants/messages';
 
 
@@ -30,7 +37,13 @@ export function validateUsername(value: string): string | undefined {
 export function validatePhoneNumber(value: string, countryCode: string): string | undefined {
   if (!isRequired(value)) return MESSAGES.REQUIRED;
   if (!isSupportedCountry(countryCode)) return MESSAGES.INVALID_PHONE;
-  if (!isPossiblePhoneNumber(value, countryCode as CountryCode)) return MESSAGES.INVALID_PHONE;
+  const country = countryCode as CountryCode;
+  const parsedPhone = parsePhoneNumberFromString(value.trim(), country);
+  if (
+    !parsedPhone
+    || parsedPhone.country !== country
+    || !isPossiblePhoneNumber(value, country)
+  ) return MESSAGES.INVALID_PHONE;
   return undefined;
 }
 
@@ -70,4 +83,3 @@ export function getPasswordStrength(value: string): PasswordStrength {
   if (variety === 3) return { score: 3, colorKey: 'info' };
   return { score: 4, colorKey: 'success' };
 }
-
