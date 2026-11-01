@@ -1,20 +1,8 @@
+// Improvement 2
+
 import { NewUserInput, User } from '../entities/User';
 import { IUserRepository } from '../repositories/IUserRepository';
-
-export class EmailAlreadyRegisteredError extends Error {
-  constructor() {
-    super();
-    this.name = 'EmailAlreadyRegisteredError';
-  }
-}
-
-export class UsernameTakenError extends Error {
-  constructor() {
-    super();
-    this.name = 'UsernameTakenError';
-  }
-}
-
+import { EmailAlreadyRegisteredError, UsernameTakenError } from '../errors/UserErrors';
 
 export async function registerUser(
   repository: IUserRepository,
@@ -42,3 +30,4 @@ export async function registerUser(
     fullName: input.fullName.trim(),
   });
 }
+
