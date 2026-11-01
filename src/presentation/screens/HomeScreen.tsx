@@ -1,3 +1,5 @@
+// Improvement 11
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { Animated, BackHandler, Easing, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -77,7 +79,10 @@ export function HomeScreen() {
 
   const handleAddProduct = useCallback((product: Parameters<typeof addProduct>[0]) => {
     const added = addProduct(product);
-    show(added ? 'Agregado al carrito' : product.stockQuantity > 0 ? 'Ya alcanzaste el máximo disponible' : 'Producto sin stock', added ? 'success' : 'info');
+    show(
+      added ? 'Agregado al carrito' : product.isActive && product.stockQuantity > 0 ? 'Ya alcanzaste el máximo disponible' : 'Producto sin stock',
+      added ? 'success' : 'info',
+    );
   }, [addProduct, show]);
 
   useEffect(() => {
@@ -92,14 +97,31 @@ export function HomeScreen() {
     return () => { active = false; };
   }, []);
 
-  const userOrders = useMemo(
-    () => currentUser
+  const { userOrders, activeOrders, deliveredOrders, cancelledOrders } = useMemo(() => {
+    const userOrders = currentUser
       ? orders
         .filter((order) => order.userId === currentUser.id)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      : [],
-    [orders, currentUser],
-  );
+      : [];
+    const grouped = {
+      userOrders,
+      activeOrders: [] as Order[],
+      deliveredOrders: [] as Order[],
+      cancelledOrders: [] as Order[],
+    };
+
+    for (const order of userOrders) {
+      if (order.status === 'pending' || order.status === 'paid' || order.status === 'shipped') {
+        grouped.activeOrders.push(order);
+      } else if (order.status === 'delivered') {
+        grouped.deliveredOrders.push(order);
+      } else {
+        grouped.cancelledOrders.push(order);
+      }
+    }
+
+    return grouped;
+  }, [orders, currentUser]);
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId) ?? null,
     [orders, selectedOrderId],
@@ -109,9 +131,7 @@ export function HomeScreen() {
 
   const firstName = currentUser.fullName.trim().split(/\s+/)[0];
   const unreadOrders = unreadOrderCount(currentUser.id);
-  const activeOrders = userOrders.filter((order) => order.status === 'pending' || order.status === 'paid' || order.status === 'shipped');
-  const deliveredOrders = userOrders.filter((order) => order.status === 'delivered');
-  const cancelledOrderCount = userOrders.filter((order) => order.status === 'cancelled').length;
+  const cancelledOrderCount = cancelledOrders.length;
   const orderSummary = [
     activeOrders.length > 0 && `${activeOrders.length} en curso`,
     deliveredOrders.length > 0 && `${deliveredOrders.length} entregado${deliveredOrders.length === 1 ? '' : 's'}`,
@@ -197,7 +217,7 @@ export function HomeScreen() {
                   <OrderSection title="Entregados" orders={deliveredOrders} onSelect={setSelectedOrderId} />
                   <OrderSection
                     title="Cancelados"
-                    orders={userOrders.filter((order) => order.status === 'cancelled')}
+                    orders={cancelledOrders}
                     onSelect={setSelectedOrderId}
                   />
                 </View>
@@ -387,3 +407,4 @@ function OrderSection({
     </View>
   );
 }
+
