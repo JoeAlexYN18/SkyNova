@@ -1,3 +1,5 @@
+// Improvement 3
+
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { NewUserInput, User } from '@/domain/entities/User';
 import { IUserRepository } from '@/domain/repositories/IUserRepository';
@@ -25,9 +27,7 @@ export function AuthProvider({ children, repository = userRepository }: AuthProv
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const register = useCallback(async (input: NewUserInput) => {
-    const user = await registerUser(repository, input);
-    setCurrentUser(user);
-    return user;
+    return registerUser(repository, input);
   }, [repository]);
 
   const login = useCallback(async (identifier: string, password: string) => {
