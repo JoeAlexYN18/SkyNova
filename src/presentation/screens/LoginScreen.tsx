@@ -1,3 +1,5 @@
+// Improvement 12
+
 import React, { useRef, useState } from 'react';
 import { Link, router } from 'expo-router';
 import {
@@ -49,7 +51,7 @@ export function LoginScreen() {
           toValue: 1,
           duration: 1400,
           easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: false,
+          useNativeDriver: true,
         }).start(({ finished }) => resolve(finished));
       });
       const finished = await animationFinished;
