@@ -1,3 +1,5 @@
+// Improvement 4
+
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { CheckoutInput, CheckoutLine, Order } from '@/domain/entities/Order';
 import type { OrderUpdate } from '@/domain/repositories/IOrderRepository';
@@ -38,6 +40,21 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkoutOrder = useCallback(async (user: User, lines: CheckoutLine[], input: CheckoutInput) => {
+    if (lines.length === 0) throw new Error('No se puede crear un pedido sin productos.');
+
+    const currency = lines[0].product.currency;
+    if (lines.some(({ product, quantity }) =>
+      !product.isActive
+      || !Number.isSafeInteger(quantity)
+      || quantity <= 0
+      || quantity > product.stockQuantity
+      || !Number.isFinite(product.price)
+      || product.price < 0
+      || product.currency !== currency
+    )) {
+      throw new Error('Revisa los productos, cantidades y precios antes de confirmar el pedido.');
+    }
+
     const order = await orderRepository.checkout({
       userId: user.id,
       shippingAddress: {
@@ -51,7 +68,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         postalCode: input.postalCode.trim() || undefined,
         countryCode: input.countryCode.trim().toUpperCase(),
       },
-      currency: lines[0]?.product.currency ?? 'USD',
+      currency,
       items: lines.map(({ product, quantity }) => ({
         productId: product.id,
         productName: product.name,
