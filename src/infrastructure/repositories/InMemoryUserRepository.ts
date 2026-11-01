@@ -1,7 +1,10 @@
+// Improvement 7
+
 import { NewUserInput, User } from '@/domain/entities/User';
 import { AuthenticationResult, IUserRepository } from '@/domain/repositories/IUserRepository';
 import { generateId } from '@/shared/utils/generateId';
 import { DEMO_CREDENTIALS } from '@/infrastructure/data/demoCredentials';
+import { EmailAlreadyRegisteredError, UsernameTakenError } from '@/domain/errors/UserErrors';
 
 type StoredUser = User & { password: string };
 
@@ -18,8 +21,21 @@ export class InMemoryUserRepository implements IUserRepository {
   }];
 
   async create(input: NewUserInput): Promise<User> {
+    const email = input.email.trim().toLowerCase();
+    const username = input.username.trim();
+
+    if (this.users.some((user) => user.email.toLowerCase() === email)) {
+      throw new EmailAlreadyRegisteredError();
+    }
+    if (this.users.some((user) => user.username.toLowerCase() === username.toLowerCase())) {
+      throw new UsernameTakenError();
+    }
+
     const user: StoredUser = {
       ...input,
+      fullName: input.fullName.trim(),
+      email,
+      username,
       id: generateId(),
       createdAt: new Date().toISOString(),
     };
