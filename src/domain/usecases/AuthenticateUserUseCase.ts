@@ -1,10 +1,17 @@
 import { User } from '../entities/User';
 import { IUserRepository } from '../repositories/IUserRepository';
 
-export class InvalidCredentialsError extends Error {
+export class UserIdentifierNotFoundError extends Error {
   constructor() {
     super();
-    this.name = 'InvalidCredentialsError';
+    this.name = 'UserIdentifierNotFoundError';
+  }
+}
+
+export class InvalidPasswordError extends Error {
+  constructor() {
+    super();
+    this.name = 'InvalidPasswordError';
   }
 }
 
@@ -14,11 +21,8 @@ export async function authenticateUser(
   identifier: string,
   password: string
 ): Promise<User> {
-  const user = await repository.authenticate(identifier.trim(), password);
-
-  if (!user) {
-    throw new InvalidCredentialsError();
-  }
-
-  return user;
+  const result = await repository.authenticate(identifier.trim(), password);
+  if (result.status === 'identifier_not_found') throw new UserIdentifierNotFoundError();
+  if (result.status === 'invalid_password') throw new InvalidPasswordError();
+  return result.user;
 }

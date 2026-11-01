@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -33,6 +33,11 @@ export function RegisterScreen() {
 
   const handleSelectCountry = (country: Country) => setField('country', country);
 
+  const handleRegister = async () => {
+    const registered = await submit();
+    if (registered) router.replace('/login' as never);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
@@ -51,14 +56,14 @@ export function RegisterScreen() {
           <ScreenHeader
             badge="El marketplace #1 de drones"
             title="Únete a SkyNova"
-            subtitle="La plataforma líder de drones multimarca y despega tu flota hoy mismo"
+            subtitle={'La plataforma lider de drones multimarca.\nDespega tu flota hoy mismo.'}
           />
 
           <View style={styles.card}>
             <TextField
               label="Nombre completo"
               icon="person"
-              placeholder="Ej. Alex Valdivia R."
+              placeholder="Ej. Joseph Alexander Yalico Nicho"
               value={values.fullName}
               onChangeText={(text) => setField('fullName', text)}
               error={errors.fullName}
@@ -69,7 +74,7 @@ export function RegisterScreen() {
             <TextField
               label="Correo electrónico"
               icon="mail"
-              placeholder="correo@skynova.aero"
+              placeholder="usuario@dominio.extensión"
               value={values.email}
               onChangeText={(text) => setField('email', text)}
               error={errors.email}
@@ -80,7 +85,7 @@ export function RegisterScreen() {
             <TextField
               label="Usuario"
               icon="at"
-              placeholder="SKY-9240 o usuario"
+              placeholder="Nombre de usuario"
               value={values.username}
               onChangeText={(text) => setField('username', text)}
               error={errors.username}
@@ -124,7 +129,7 @@ export function RegisterScreen() {
               title="Crear cuenta"
               icon="person-add"
               loading={isSubmitting}
-              onPress={submit}
+              onPress={handleRegister}
             />
             <Text style={styles.loginPrompt}>
               ¿Ya tienes una cuenta activa?{' '}

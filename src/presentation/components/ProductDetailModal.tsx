@@ -3,6 +3,7 @@ import { Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } fr
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Product, ProductCategory } from '@/domain/entities/Product';
 import { colors, radius, spacing } from '@/shared/theme';
+import { formatCurrency } from '@/shared/utils/formatCurrency';
 
 interface Props {
   product: Product | null;
@@ -57,8 +58,8 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
             </View>
 
             <View style={styles.priceLine}>
-              <Text style={styles.price}>{formatPrice(product.price, product.currency)}</Text>
-              {discount !== undefined && <Text style={styles.comparePrice}>{formatPrice(product.compareAtPrice!, product.currency)}</Text>}
+              <Text style={styles.price}>{formatCurrency(product.price, product.currency)}</Text>
+              {discount !== undefined && <Text style={styles.comparePrice}>{formatCurrency(product.compareAtPrice!, product.currency)}</Text>}
             </View>
             <View style={styles.stockRow}>
               <View style={[styles.stockDot, !available && styles.stockDotEmpty]} />
@@ -99,10 +100,6 @@ function SpecRow({ icon, label, value }: { icon: string; label: string; value: s
     <Text style={styles.specLabel}>{label}</Text>
     <Text style={styles.specValue} numberOfLines={1}>{value}</Text>
   </View>;
-}
-
-function formatPrice(price: number, currency: string) {
-  return new Intl.NumberFormat('es-CO', { style: 'currency', currency, maximumFractionDigits: 0 }).format(price);
 }
 
 const styles = StyleSheet.create({

@@ -30,6 +30,7 @@ export interface Order {
   currency: string;
   items: OrderItemSnapshot[];
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface CheckoutInput {

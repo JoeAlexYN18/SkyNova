@@ -1,18 +1,18 @@
 # SkyNova
 
-SkyNova es una aplicación móvil para explorar y comprar drones, accesorios y repuestos. Reúne inicio, catálogo con filtros, detalle de producto, carrito, confirmación de pedidos y perfil en una experiencia sencilla para pilotos y entusiastas.
+SkyNova es una aplicación móvil para explorar y comprar drones, accesorios y repuestos. Incluye catálogo, carrito, checkout y gestión de pedidos desde el perfil.
 
 ## Core de negocio
 
-El proyecto representa una tienda especializada de un solo proveedor: SkyNova vende su propio catálogo de drones y productos relacionados. El flujo principal es:
+SkyNova representa una tienda especializada de un solo proveedor. El flujo principal es:
 
 1. Explorar o filtrar productos.
 2. Consultar sus detalles y disponibilidad.
 3. Añadirlos al carrito y ajustar cantidades.
 4. Confirmar un pedido con datos de entrega.
-5. Consultar o cancelar pedidos desde el perfil.
+5. Consultar, editar los datos de entrega o cancelar pedidos desde el perfil.
 
-El esquema PostgreSQL está en `database/schema.sql` y documenta el modelo futuro de usuarios, productos, carritos y pedidos. **La aplicación todavía no está conectada a PostgreSQL ni a una API**: las cuentas, el catálogo, el carrito y los pedidos usan repositorios y estado en memoria, así que los datos de prueba se pierden al cerrar o reiniciar la aplicación. Tampoco hay un proveedor de pagos integrado.
+El catálogo permite buscar, filtrar por categoría, tipo, ofertas o destacados, ordenar resultados y ver cuántos productos coinciden. El esquema PostgreSQL está en `database/schema.sql` y sirve como referencia para una integración futura. Por ahora no hay conexión a una base de datos, API ni pasarela de pago: los datos se manejan en memoria y se reinician al cerrar la aplicación.
 
 ## Requisitos
 
@@ -45,6 +45,8 @@ npx expo start
 
 Escanea el código QR con Expo Go en el teléfono. Para Android se puede abrir también un emulador configurado en Android Studio y pulsar `a` en la terminal de Expo. El equipo y el teléfono deben poder comunicarse por la red local.
 
+En Windows PowerShell, si la política del sistema bloquea `npx` o `npm`, usa `npx.cmd expo start` o `npm.cmd start`.
+
 También están disponibles estos comandos abreviados:
 
 ```bash
@@ -70,29 +72,39 @@ La pantalla de Login viene precargada con esta cuenta local:
 
 ```text
 Usuario: JoeAlexYN18
-Contraseña: JosephYNZ20000
+Contraseña: JosephYNZ2000
 ```
 
-La aplicación también permite registrar usuarios, pero las cuentas solo existen en memoria durante la sesión actual.
+La aplicación también permite registrar usuarios. Las cuentas de prueba existen solo en memoria y se reinician al cerrar la aplicación.
 
-## Cómo probar el flujo CRUD
+## Pedidos y CRUD
 
-El CRUD principal disponible en la interfaz corresponde al carrito: crear líneas al añadir productos, leer su contenido, actualizar cantidades y eliminar productos.
+El CRUD de pedidos se demuestra con operaciones sencillas:
 
-1. Inicia sesión con la cuenta de prueba indicada arriba.
-2. Abre **Catálogo**, elige un producto y entra a sus detalles. Pulsa **Agregar al carrito**. El indicador de Carrito debe actualizarse.
-3. En **Carrito**, aumenta o reduce la cantidad. Comprueba que el total cambie, elimina una línea y prueba **Vaciar** para dejar el carrito sin productos.
-4. Añade un producto otra vez y continúa con el pedido. Completa nombre, teléfono, dirección, ciudad y código de país de dos letras; confirma el pedido.
-5. Ve a **Perfil → Mis pedidos**. El pedido debe aparecer con sus productos, dirección, total y estado. Al abrir Mis pedidos se limpia el indicador de pedido nuevo.
-6. Pulsa **Cancelar pedido** y confirma en el diálogo. El pedido cancelado deja de contarse entre los pedidos activos; si era el único, aparece el estado vacío.
+- **Crear:** confirmar el checkout registra los productos, precios y dirección como una copia del pedido. En el flujo actual queda en estado `paid`.
+- **Leer:** **Perfil → Mis pedidos** muestra el historial separado en pedidos en curso, entregados y cancelados, con su detalle y estado.
+- **Actualizar:** se pueden corregir los datos de entrega mientras el pedido está en `pending` o `paid`.
+- **Cancelar:** cambia el estado a `cancelled`; el pedido se conserva en el historial en lugar de borrarse.
 
-Los pedidos se crean localmente y no se realiza un cobro. Cambiar de pestaña conserva el estado mientras la aplicación siga abierta; cerrar o reiniciar la app borra los datos de prueba.
+El repositorio valida los datos de entrega y los artículos, evita líneas duplicadas y comprueba que el pedido y su dirección pertenezcan al mismo usuario. `pending` está disponible para pedidos aún no confirmados, pero el checkout actual confirma el pedido como `paid`; los cambios a `shipped` y `delivered` todavía no se simulan desde la interfaz.
+
+## Cómo probar el flujo
+
+1. Inicia sesión con la cuenta de prueba precargada.
+2. En **Catálogo**, abre un producto y agrégalo al carrito.
+3. En **Carrito**, ajusta cantidades o elimina artículos; revisa que el total se actualice.
+4. Finaliza la compra completando los datos de entrega. El país determina el prefijo telefónico; escribe solo el número nacional.
+5. Abre **Perfil → Mis pedidos** para revisar el pedido, editar la entrega o cancelarlo. Al cancelar, seguirá visible en la sección **Cancelados**.
+
+Los pedidos y sus cambios se mantienen en memoria mientras la aplicación siga abierta. `IOrderRepository` define el contrato y `InMemoryOrderRepository` implementa el almacenamiento actual, listo para sustituirse por una persistencia futura.
 
 ## Organización del proyecto
 
 - `src/app/`: rutas de Expo Router.
 - `src/domain/`: entidades, contratos y casos de uso.
 - `src/infrastructure/`: contextos, repositorios en memoria y composición de dependencias.
+- `src/domain/repositories/IOrderRepository.ts`: contrato CRUD de pedidos.
+- `src/infrastructure/repositories/InMemoryOrderRepository.ts`: implementación actual en memoria; cancelar conserva el pedido con estado `cancelled`.
 - `src/presentation/`: pantallas y componentes de interfaz.
 - `src/shared/`: tema, validaciones, mensajes y utilidades comunes.
 - `database/schema.sql`: esquema PostgreSQL propuesto para una integración futura.

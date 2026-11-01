@@ -7,10 +7,12 @@ const categories: ProductCategory[] = [
   { id: 'cat-drones-8k', name: 'Drones 8K', icon: 'video-outline', productType: 'drone' },
   { id: 'cat-fpv-carreras', name: 'FPV Carreras', icon: 'speedometer', productType: 'drone' },
   { id: 'cat-baterias', name: 'Baterías', icon: 'battery', productType: 'spare_part' },
-  { id: 'cat-repuestos', name: 'Hélices', icon: 'fan', productType: 'spare_part' },
-  { id: 'cat-drones-cine', name: 'Cinematográficos', icon: 'movie-open-outline', productType: 'drone' },
   { id: 'cat-filtros-nd', name: 'Filtros ND', icon: 'camera-iris', productType: 'accessory' },
   { id: 'cat-protecciones', name: 'Protecciones', icon: 'shield-outline', productType: 'accessory' },
+  { id: 'cat-repuestos', name: 'Hélices', icon: 'fan', productType: 'spare_part' },
+  { id: 'cat-brazos', name: 'Brazos', icon: 'wrench-outline', productType: 'spare_part' },
+  { id: 'cat-motores', name: 'Motores', icon: 'engine-outline', productType: 'spare_part' },
+  { id: 'cat-drones-cine', name: 'Cinematográficos', icon: 'movie-open-outline', productType: 'drone' },
 ];
 
 const products: Product[] = [
@@ -249,14 +251,17 @@ export class InMemoryProductRepository implements IProductRepository {
         .includes(search);
     });
 
-    matches.sort((left, right) => compareProducts(left, right, query.sortBy ?? 'relevance'));
+    const sortBy = query.sortBy ?? 'relevance';
+    const sortedMatches = sortBy === 'relevance'
+      ? interleaveRelevantProducts(matches)
+      : matches.sort((left, right) => compareProducts(left, right, sortBy));
 
     const page = Math.max(1, Math.floor(query.page ?? 1));
     const pageSize = Math.max(1, Math.floor(query.pageSize ?? 12));
     const start = (page - 1) * pageSize;
 
     return {
-      items: matches.slice(start, start + pageSize).map(cloneProduct),
+      items: sortedMatches.slice(start, start + pageSize).map(cloneProduct),
       total: matches.length,
       page,
       pageSize,
@@ -268,6 +273,39 @@ function cloneProduct(product: Product): Product {
   return { ...product };
 }
 
+function interleaveRelevantProducts(productsToRank: Product[]) {
+  const queues: Product[][] = [[], [], [], []];
+  for (const product of productsToRank) {
+    const isOffer = product.compareAtPrice !== undefined && product.compareAtPrice > product.price;
+    const isFeatured = product.isFeatured === true;
+    const queueIndex = isOffer
+      ? isFeatured ? 0 : 2
+      : isFeatured ? 1 : 3;
+    queues[queueIndex].push(product);
+  }
+
+  const compareWithinGroup = (left: Product, right: Product) =>
+    (right.salesCount ?? 0) - (left.salesCount ?? 0)
+    || (right.ratingAverage ?? 0) - (left.ratingAverage ?? 0)
+    || left.id.localeCompare(right.id);
+  queues.forEach((queue) => queue.sort(compareWithinGroup));
+
+  const positions = queues.map(() => 0);
+  const interleaved: Product[] = [];
+  let remaining = productsToRank.length;
+  while (remaining > 0) {
+    queues.forEach((queue, index) => {
+      const position = positions[index];
+      if (position < queue.length) {
+        interleaved.push(queue[position]);
+        positions[index] = position + 1;
+        remaining -= 1;
+      }
+    });
+  }
+  return interleaved;
+}
+
 function compareProducts(left: Product, right: Product, sortBy: NonNullable<ProductQuery['sortBy']>) {
   switch (sortBy) {
     case 'price_asc': return left.price - right.price;
@@ -275,8 +313,6 @@ function compareProducts(left: Product, right: Product, sortBy: NonNullable<Prod
     case 'best_selling': return (right.salesCount ?? 0) - (left.salesCount ?? 0);
     case 'best_rated': return (right.ratingAverage ?? 0) - (left.ratingAverage ?? 0);
     case 'newest': return Date.parse(right.createdAt ?? '') - Date.parse(left.createdAt ?? '');
-    default:
-      return Number(right.isFeatured ?? false) - Number(left.isFeatured ?? false)
-        || (right.salesCount ?? 0) - (left.salesCount ?? 0);
+    default: return (right.salesCount ?? 0) - (left.salesCount ?? 0);
   }
 }

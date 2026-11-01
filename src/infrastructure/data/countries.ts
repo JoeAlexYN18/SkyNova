@@ -1,4 +1,4 @@
-import { Country } from '../../domain/entities/Country';
+import { Country } from '@/domain/entities/Country';
 
 
 export const COUNTRIES: Country[] = [
@@ -57,7 +57,7 @@ export const COUNTRIES: Country[] = [
 ];
 
 export const DEFAULT_COUNTRY: Country =
-  COUNTRIES.find((c) => c.code === 'MX') ?? COUNTRIES[0];
+  COUNTRIES.find((c) => c.code === 'US') ?? COUNTRIES[0];
 
 
 export function fetchCountries(): Promise<Country[]> {
@@ -65,3 +65,4 @@ export function fetchCountries(): Promise<Country[]> {
     setTimeout(() => resolve(COUNTRIES), 500);
   });
 }
+

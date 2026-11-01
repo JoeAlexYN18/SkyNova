@@ -1,7 +1,6 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { getExampleNumber, type CountryCode } from 'libphonenumber-js';
-import mobileExamples from 'libphonenumber-js/mobile/examples';
+import { AsYouType, type CountryCode } from 'libphonenumber-js';
 import { Ionicons } from '@expo/vector-icons';
 import { Country } from '@/domain/entities/Country';
 import { colors, radius, spacing, typography } from '@/shared/theme';
@@ -23,12 +22,7 @@ export function PhoneField({
   error,
 }: PhoneFieldProps) {
   const borderColor = error ? colors.borderError : colors.border;
-  const placeholder = useMemo(
-    () =>
-      getExampleNumber(country.code as CountryCode, mobileExamples)?.formatNational() ??
-      'Ingresa tu número',
-    [country.code]
-  );
+  const placeholder = 'Tu n\u00famero';
 
   const handleChangeNumber = (input: string) => {
     let digits = input.replace(/\D/g, '');
@@ -36,7 +30,9 @@ export function PhoneField({
     if (input.trim().startsWith('+') && digits.startsWith(dialCode)) {
       digits = digits.slice(dialCode.length);
     }
-    onChangeNumber(digits);
+    const formatter = new AsYouType(country.code as CountryCode);
+    const formatted = formatter.input(digits);
+    onChangeNumber(formatted.replace(/\D/g, ''));
   };
 
   return (
@@ -63,7 +59,7 @@ export function PhoneField({
             onChangeText={handleChangeNumber}
             keyboardType="phone-pad"
             accessibilityLabel={`Número de teléfono de ${country.name}`}
-            accessibilityHint={`Ingresa solo el número nacional, sin el prefijo ${country.dialCode}. Ejemplo: ${placeholder}.`}
+            accessibilityHint={`Ingresa solo el número nacional, sin el prefijo ${country.dialCode}.`}
           />
         </View>
       </View>
@@ -97,3 +93,6 @@ const styles = StyleSheet.create({
   },
   input: { ...typography.body, color: colors.textPrimary, padding: 0 },
 });
+
+
+

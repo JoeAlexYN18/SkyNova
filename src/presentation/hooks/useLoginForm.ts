@@ -1,9 +1,8 @@
 import { useCallback, useState } from 'react';
-import { InvalidCredentialsError } from '@/domain/usecases/AuthenticateUserUseCase';
+import { InvalidPasswordError, UserIdentifierNotFoundError } from '@/domain/usecases/AuthenticateUserUseCase';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { MESSAGES } from '@/shared/constants/messages';
-import { validateEmail, validateUsername } from '@/shared/validators/formValidators';
 import { DEMO_CREDENTIALS } from '@/infrastructure/data/demoCredentials';
 
 type LoginField = 'identifier' | 'password';
@@ -47,12 +46,7 @@ export function useLoginForm() {
     const identifier = state.identifier.trim();
     if (!identifier) {
       errors.identifier = MESSAGES.LOGIN_IDENTIFIER_REQUIRED;
-    } else {
-      errors.identifier = identifier.includes('@')
-        ? validateEmail(identifier)
-        : validateUsername(identifier);
     }
-    if (!state.password.length) errors.password = MESSAGES.LOGIN_PASSWORD_REQUIRED;
 
     if (Object.keys(errors).length > 0) {
       setState((current) => ({ ...current, errors }));
@@ -62,14 +56,20 @@ export function useLoginForm() {
     setState((current) => ({ ...current, errors: {}, isSubmitting: true }));
     try {
       await login(identifier, state.password);
-      show(MESSAGES.LOGIN_SUCCESS, 'success');
       return true;
     } catch (error) {
-      if (error instanceof InvalidCredentialsError) {
+      if (error instanceof UserIdentifierNotFoundError) {
         setState((current) => ({
           ...current,
-          errors: { password: MESSAGES.LOGIN_INVALID_CREDENTIALS },
+          errors: { identifier: MESSAGES.LOGIN_USER_NOT_FOUND },
         }));
+        show(MESSAGES.LOGIN_USER_NOT_FOUND, 'error');
+      } else if (error instanceof InvalidPasswordError) {
+        setState((current) => ({
+          ...current,
+          errors: { password: MESSAGES.LOGIN_INVALID_PASSWORD },
+        }));
+        show(MESSAGES.LOGIN_INVALID_PASSWORD, 'error');
       } else {
         show(MESSAGES.LOGIN_GENERIC_ERROR, 'error');
       }

@@ -15,6 +15,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Product, ProductBrand, ProductCategory } from '@/domain/entities/Product';
 import type { ProductSort } from '@/domain/repositories/IProductRepository';
 import { colors } from '@/shared/theme';
+import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
 
 export type CatalogEntryOptions = {
@@ -23,6 +24,8 @@ export type CatalogEntryOptions = {
   brand?: string;
   openFilters?: boolean;
   productGroup?: 'drones' | 'accessories';
+  productGroups?: ('drones' | 'accessories' | 'spare_parts')[];
+  isOffer?: boolean;
   isFeatured?: boolean;
   sortBy?: ProductSort;
 };
@@ -118,7 +121,10 @@ export function HomeFeed({
           <Text style={styles.sectionTitle}>más vendidos</Text>
           <Text style={styles.sectionSubtitle}>Lo esencial para mantener tu flota lista</Text>
         </View>
-        <TouchableOpacity onPress={() => onNavigateCatalog({ productGroup: 'accessories', sortBy: 'best_selling' })} accessibilityRole="link">
+        <TouchableOpacity
+          onPress={() => onNavigateCatalog({ productGroups: ['accessories', 'spare_parts'], sortBy: 'best_selling' })}
+          accessibilityRole="link"
+        >
           <Text style={styles.smallLink}>VER TODOS</Text>
         </TouchableOpacity>
       </View>
@@ -140,13 +146,27 @@ export function HomeFeed({
 function HomePromo({ onNavigateCatalog }: { onNavigateCatalog: CatalogNavigation }) {
   return (
     <View style={styles.promo}>
-      <View style={styles.promoVisual}><SkyBannerIllustration /></View>
+      <View style={styles.promoVisual}>
+        <View style={styles.promoGlow} />
+        <MaterialCommunityIcons name="star" size={15} color="#FFE08A" style={styles.promoSparkle} />
+        <View style={styles.promoGiftBox}>
+          <View style={styles.promoGiftLid} />
+          <View style={styles.promoGiftRibbon} />
+          <View style={styles.promoGiftBowLeft} />
+          <View style={styles.promoGiftBowRight} />
+        </View>
+        <View style={styles.promoPriceTag}>
+          <Text style={styles.promoPercent}>%</Text>
+          <Text style={styles.promoTagCaption}>AHORRA</Text>
+        </View>
+        <View style={styles.promoDiscountBadge}><Text style={styles.promoDiscountText}>OFERTAS</Text></View>
+      </View>
       <View style={styles.promoCopy}>
-        <Text style={styles.promoTag}>NOVEDADES SKYNOVA  ·  EQUIPO PARA CADA MISIÓN</Text>
-        <Text style={styles.promoTitle}>Tu próxima gran aventura empieza desde el cielo.</Text>
-        <Text style={styles.promoSubtitle}>Encuentra drones, accesorios y repuestos para llevar cada vuelo más lejos.</Text>
-        <TouchableOpacity style={styles.promoButton} onPress={() => onNavigateCatalog()}>
-          <Text style={styles.promoButtonText}>Descubrir productos</Text>
+        <Text style={styles.promoTag}>OFERTAS POR TIEMPO LIMITADO</Text>
+        <Text style={styles.promoTitle}>Tu próximo vuelo, a mejor precio.</Text>
+        <Text style={styles.promoSubtitle}>Descubre precios especiales en drones, accesorios y repuestos seleccionados</Text>
+        <TouchableOpacity style={styles.promoButton} onPress={() => onNavigateCatalog({ isOffer: true })}>
+          <Text style={styles.promoButtonText}>Ver ofertas</Text>
           <MaterialCommunityIcons name="arrow-right" size={17} color={colors.onPrimary} />
         </TouchableOpacity>
       </View>
@@ -201,7 +221,17 @@ function ProductSection({ title, subtitle, products, onAdd, onOpen, onViewAll, e
   );
 }
 
-export function ProductListItem({ product, onAdd, onOpen }: { product: Product; onAdd: (product: Product) => void; onOpen: (product: Product) => void }) {
+export function ProductListItem({
+  product,
+  onAdd,
+  onOpen,
+  showFeaturedBadge = false,
+}: {
+  product: Product;
+  onAdd: (product: Product) => void;
+  onOpen: (product: Product) => void;
+  showFeaturedBadge?: boolean;
+}) {
   const discountPercent = product.compareAtPrice && product.compareAtPrice > product.price
     ? Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)
     : null;
@@ -209,29 +239,31 @@ export function ProductListItem({ product, onAdd, onOpen }: { product: Product; 
   return (
     <View style={styles.featureCard}>
       <Pressable style={({ pressed }) => [styles.productCardContent, pressed && styles.productPressed]} onPress={() => onOpen(product)} accessibilityRole="button" accessibilityLabel={`Ver detalles de ${product.name}`}>
-      <View style={styles.productArtContainer}>
         <ProductImage product={product} style={styles.productArt} iconSize={48} />
-        <View style={styles.productBadges}>
-          {product.productType === 'drone' && product.isFeatured && (
-            <View style={styles.featuredBadge}>
-              <Text style={styles.featuredBadgeText}>DESTACADO</Text>
-            </View>
-          )}
-          {discountPercent !== null && (
-            <View style={styles.discountBadge}>
-              <Text style={styles.discountBadgeText}>{discountPercent}% MENOS</Text>
-            </View>
-          )}
-        </View>
-      </View>
-      <View style={styles.featureInfo}>
+        <View style={styles.featureInfo}>
+        {(discountPercent !== null || (showFeaturedBadge && product.productType === 'drone' && product.isFeatured)) && (
+          <View style={styles.productBadges}>
+            {discountPercent !== null && (
+              <View style={styles.discountBadge}>
+                <MaterialCommunityIcons name="tag-outline" size={11} color="#FFFFFF" />
+                <Text style={styles.discountBadgeText}>−{discountPercent}%</Text>
+              </View>
+            )}
+            {showFeaturedBadge && product.productType === 'drone' && product.isFeatured && (
+              <View style={styles.featuredBadge}>
+                <MaterialCommunityIcons name="star-four-points" size={10} color="#553C00" />
+                <Text style={styles.featuredBadgeText}>DESTACADO</Text>
+              </View>
+            )}
+          </View>
+        )}
         <Text style={styles.productBrand}>{product.brand.toUpperCase()}</Text>
         <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
         <Text style={styles.productDescription} numberOfLines={1}>{product.description}</Text>
         <View style={styles.priceRow}>
-          <Text style={styles.price}>{formatPrice(product.price, product.currency)}</Text>
+          <Text style={styles.price}>{formatCurrency(product.price, product.currency)}</Text>
           {product.compareAtPrice && product.compareAtPrice > product.price && (
-            <Text style={styles.oldPrice}>{formatPrice(product.compareAtPrice, product.currency)}</Text>
+            <Text style={styles.oldPrice}>{formatCurrency(product.compareAtPrice, product.currency)}</Text>
           )}
         </View>
         <Text style={styles.stock}>• {product.stockQuantity} disponibles</Text>
@@ -248,15 +280,24 @@ function AccessoryCard({ product, onAdd, onOpen }: { product: Product; onAdd: (p
   return (
     <View style={styles.accessoryCard}>
       <Pressable onPress={() => onOpen(product)} accessibilityRole="button" accessibilityLabel={`Ver detalles de ${product.name}`} style={({ pressed }) => pressed && styles.productPressed}>
-      <View style={styles.accessoryArt}>
-        <ProductImage product={product} style={StyleSheet.absoluteFill} iconSize={35} />
-        <Text style={styles.artCaption}>{product.productType === 'spare_part' ? 'REPUESTO' : 'ACCESORIO'}</Text>
-      </View>
-      <Text style={styles.accessoryName} numberOfLines={2}>{product.name}</Text>
-      <Text style={styles.productDescription} numberOfLines={1}>{product.brand}</Text>
+        <View style={styles.accessoryArt}>
+          <ProductImage product={product} style={StyleSheet.absoluteFill} iconSize={35} />
+        </View>
+        <View style={styles.accessoryTypeBadge}>
+          <MaterialCommunityIcons
+            name={product.productType === 'spare_part' ? 'cog-outline' : 'toolbox-outline'}
+            size={12}
+            color="#075E63"
+          />
+          <Text style={styles.accessoryTypeText}>
+            {product.productType === 'spare_part' ? 'Repuesto' : 'Accesorio'}
+          </Text>
+        </View>
+        <Text style={styles.accessoryName} numberOfLines={2}>{product.name}</Text>
+        <Text style={styles.productDescription} numberOfLines={1}>{product.brand}</Text>
       </Pressable>
       <View style={styles.accessoryFooter}>
-        <Text style={styles.accessoryPrice}>{formatPrice(product.price, product.currency)}</Text>
+        <Text style={styles.accessoryPrice}>{formatCurrency(product.price, product.currency)}</Text>
         <TouchableOpacity style={styles.smallAdd} onPress={() => onAdd(product)} accessibilityLabel={`Agregar ${product.name} al carrito`}>
           <MaterialCommunityIcons name="plus" size={20} color={colors.primary} />
         </TouchableOpacity>
@@ -286,22 +327,4 @@ function ProductImage({ product, style, iconSize }: { product: Product; style: S
       )}
     </View>
   );
-}
-
-function SkyBannerIllustration() {
-  return (
-    <View style={styles.skyIllustration}>
-      <View style={styles.illustrationSun} />
-      <View style={styles.illustrationCloud}><MaterialCommunityIcons name="cloud-outline" size={22} color="#D9F6FF" /></View>
-      <View style={styles.illustrationFlightPath} />
-      <View style={styles.illustrationHillBack} />
-      <View style={styles.illustrationHillFront} />
-      <View style={styles.illustrationDrone}><MaterialCommunityIcons name="quadcopter" size={40} color="#E9FBFF" /></View>
-      <Text style={styles.illustrationCaption}>SKY · 01</Text>
-    </View>
-  );
-}
-
-function formatPrice(price: number, currency: string) {
-  return new Intl.NumberFormat('es-CO', { style: 'currency', currency, maximumFractionDigits: 0 }).format(price);
 }

@@ -36,7 +36,8 @@ export function validatePhoneNumber(value: string, countryCode: string): string 
 
 export function validatePassword(value: string): string | undefined {
   if (!value.length) return MESSAGES.REQUIRED;
-  if (Array.from(value).length < 15) return MESSAGES.PASSWORD_TOO_SHORT;
+  if (Array.from(value).length < 8) return MESSAGES.PASSWORD_TOO_SHORT;
+  if (getPasswordStrength(value).score < 3) return MESSAGES.PASSWORD_TOO_WEAK;
   return undefined;
 }
 
@@ -62,10 +63,11 @@ export interface PasswordStrength {
 
 
 export function getPasswordStrength(value: string): PasswordStrength {
-  const length = Array.from(value).length;
-  if (!length) return { score: 0, colorKey: 'muted' };
-  if (length < 8) return { score: 1, colorKey: 'danger' };
-  if (length < 12) return { score: 2, colorKey: 'warning' };
-  if (length < 15) return { score: 3, colorKey: 'info' };
+  if (!value.length) return { score: 0, colorKey: 'muted' };
+  const variety = [/[a-z]/.test(value), /[A-Z]/.test(value), /\d/.test(value), /[^a-zA-Z0-9]/.test(value)].filter(Boolean).length;
+  if (variety <= 1) return { score: 1, colorKey: 'danger' };
+  if (variety === 2) return { score: 2, colorKey: 'warning' };
+  if (variety === 3) return { score: 3, colorKey: 'info' };
   return { score: 4, colorKey: 'success' };
 }
+

@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { Product, ProductBrand, ProductCategory, ProductType } from '@/domain/entities/Product';
+import type { Product, ProductBrand, ProductCategory } from '@/domain/entities/Product';
 import type { ProductPage, ProductSort } from '@/domain/repositories/IProductRepository';
 import { productRepository } from '@/infrastructure/container';
 import { ProductListItem, type CatalogEntryOptions } from '@/presentation/components/HomeFeed';
@@ -27,7 +27,7 @@ type CatalogFeedProps = {
   onOpenProduct: (product: Product) => void;
 };
 
-type CatalogGroup = 'drones' | 'accessories';
+type CatalogGroup = 'drones' | 'accessories' | 'spare_parts';
 type TypeCounts = Record<CatalogGroup, number>;
 type BudgetRange = { id: string; label: string; minPrice?: number; maxPrice?: number };
 
@@ -41,12 +41,13 @@ const SORT_OPTIONS: { value: ProductSort; label: string }[] = [
   { value: 'newest', label: 'Más recientes' },
 ];
 
-const GROUP_TYPES: Record<CatalogGroup, ProductType[]> = {
-  drones: ['drone'],
-  accessories: ['accessory', 'spare_part'],
+const GROUP_CATEGORY_IDS: Record<CatalogGroup, string[]> = {
+  drones: ['cat-drones-4k', 'cat-drones-8k', 'cat-fpv-carreras', 'cat-drones-cine'],
+  accessories: ['cat-baterias', 'cat-filtros-nd', 'cat-protecciones'],
+  spare_parts: ['cat-repuestos', 'cat-brazos', 'cat-motores'],
 };
 
-const EMPTY_COUNTS: TypeCounts = { drones: 0, accessories: 0 };
+const EMPTY_COUNTS: TypeCounts = { drones: 0, accessories: 0, spare_parts: 0 };
 const BUDGET_RANGES: BudgetRange[] = [
   { id: 'all', label: 'Cualquier presupuesto' },
   { id: 'under-300', label: 'Menos de $300', maxPrice: 299.99 },
@@ -60,12 +61,14 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [brands, setBrands] = useState<ProductBrand[]>([]);
   const [search, setSearch] = useState(initialFilters.search ?? '');
-  const [selectedGroup, setSelectedGroup] = useState<CatalogGroup | null>(initialFilters.productGroup ?? null);
+  const [selectedGroups, setSelectedGroups] = useState<CatalogGroup[]>(
+    initialFilters.productGroups ?? (initialFilters.productGroup ? [initialFilters.productGroup] : []),
+  );
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(() => initialFilters.categoryId ? [initialFilters.categoryId] : []);
   const [brand, setBrand] = useState<string | undefined>(initialFilters.brand);
   const [budgetRangeId, setBudgetRangeId] = useState<string>('all');
   const [minFlightMinutes, setMinFlightMinutes] = useState<number | undefined>();
-  const [isOfferOnly, setIsOfferOnly] = useState(false);
+  const [isOfferOnly, setIsOfferOnly] = useState(initialFilters.isOffer ?? false);
   const [isFeaturedOnly, setIsFeaturedOnly] = useState(initialFilters.isFeatured ?? false);
   const [sortBy, setSortBy] = useState<ProductSort>(initialFilters.sortBy ?? 'relevance');
   const [typeCounts, setTypeCounts] = useState<TypeCounts>(EMPTY_COUNTS);
@@ -78,6 +81,18 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
   const [reloadKey, setReloadKey] = useState(0);
   const loadMoreRequest = useRef(0);
   const selectedBudgetRange = BUDGET_RANGES.find((range) => range.id === budgetRangeId) ?? BUDGET_RANGES[0];
+  const categoryFilterIds = useMemo(
+    () => selectedGroups.length
+      ? selectedCategoryIds.length
+        ? selectedCategoryIds
+        : selectedGroups.flatMap((group) => GROUP_CATEGORY_IDS[group])
+      : selectedCategoryIds,
+    [selectedGroups, selectedCategoryIds],
+  );
+  const selectedFlightFilter = selectedGroups.length === 0
+    || (selectedGroups.length === 1 && selectedGroups[0] === 'drones')
+    ? minFlightMinutes
+    : undefined;
 
   useEffect(() => {
     let active = true;
@@ -86,7 +101,11 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
         setCategories(categoryResult);
         setBrands(brandResult);
         const initialCategory = categoryResult.find((category) => category.id === initialFilters.categoryId);
-        if (initialCategory) setSelectedGroup(initialCategory.productType === 'drone' ? 'drones' : 'accessories');
+        if (initialCategory) {
+          const categoryGroup = (Object.keys(GROUP_CATEGORY_IDS) as CatalogGroup[])
+            .find((group) => GROUP_CATEGORY_IDS[group].includes(initialCategory.id));
+          if (categoryGroup) setSelectedGroups([categoryGroup]);
+        }
       }
     }).catch(() => {
       if (active) setHasError(true);
@@ -104,14 +123,13 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
       setPageResult(null);
       productRepository.listProducts({
         search,
-        categoryIds: selectedCategoryIds,
         brand,
-        productTypes: selectedGroup ? GROUP_TYPES[selectedGroup] : undefined,
+        categoryIds: categoryFilterIds,
         isOffer: isOfferOnly,
         isFeatured: isFeaturedOnly,
         minPrice: selectedBudgetRange.minPrice,
         maxPrice: selectedBudgetRange.maxPrice,
-        minFlightMinutes,
+        minFlightMinutes: selectedFlightFilter,
         sortBy,
         page: 1,
         pageSize: PAGE_SIZE,
@@ -128,27 +146,39 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
       active = false;
       clearTimeout(timeout);
     };
-  }, [search, selectedCategoryIds, brand, selectedGroup, isOfferOnly, isFeaturedOnly, selectedBudgetRange, minFlightMinutes, sortBy, reloadKey]);
+  }, [search, categoryFilterIds, brand, selectedGroups, isOfferOnly, isFeaturedOnly, selectedBudgetRange, selectedFlightFilter, sortBy, reloadKey]);
 
   useEffect(() => {
     let active = true;
     const countForGroup = (group: CatalogGroup) => productRepository.listProducts({
       search,
       brand,
-      productTypes: GROUP_TYPES[group],
-      categoryIds: selectedGroup === group ? selectedCategoryIds : undefined,
+      categoryIds: (() => {
+        const selectedGroupCategoryIds = selectedCategoryIds.filter((categoryId) => GROUP_CATEGORY_IDS[group].includes(categoryId));
+        return selectedGroups.includes(group) && selectedGroupCategoryIds.length
+          ? selectedGroupCategoryIds
+          : GROUP_CATEGORY_IDS[group];
+      })(),
       isOffer: isOfferOnly,
       isFeatured: isFeaturedOnly,
       minPrice: selectedBudgetRange.minPrice,
       maxPrice: selectedBudgetRange.maxPrice,
-      minFlightMinutes,
+      minFlightMinutes: group === 'drones' ? selectedFlightFilter : undefined,
       page: 1,
       pageSize: 1,
     });
 
     const timeout = setTimeout(() => {
-      Promise.all([countForGroup('drones'), countForGroup('accessories')]).then(([drones, accessories]) => {
-        if (active) setTypeCounts({ drones: drones.total, accessories: accessories.total });
+      Promise.all([
+        countForGroup('drones'),
+        countForGroup('accessories'),
+        countForGroup('spare_parts'),
+      ]).then(([drones, accessories, spareParts]) => {
+        if (active) setTypeCounts({
+          drones: drones.total,
+          accessories: accessories.total,
+          spare_parts: spareParts.total,
+        });
       }).catch(() => {
         if (active) setTypeCounts(EMPTY_COUNTS);
       });
@@ -158,13 +188,13 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
       active = false;
       clearTimeout(timeout);
     };
-  }, [search, brand, selectedGroup, selectedCategoryIds, isOfferOnly, isFeaturedOnly, selectedBudgetRange, minFlightMinutes]);
+  }, [search, brand, selectedGroups, selectedCategoryIds, isOfferOnly, isFeaturedOnly, selectedBudgetRange, selectedFlightFilter]);
 
   const visibleCategories = useMemo(
-    () => selectedGroup ? categories.filter((category) => (
-      selectedGroup === 'drones' ? category.productType === 'drone' : category.productType !== 'drone'
-    )) : [],
-    [categories, selectedGroup],
+    () => selectedGroups.length
+      ? categories.filter((category) => selectedGroups.some((group) => GROUP_CATEGORY_IDS[group].includes(category.id)))
+      : [],
+    [categories, selectedGroups],
   );
 
   const selectedCategories = useMemo(
@@ -180,9 +210,11 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
   ];
 
   const toggleGroup = (group: CatalogGroup) => {
-    setSelectedGroup((current) => current === group ? null : group);
+    setSelectedGroups((current) => current.includes(group)
+      ? current.filter((selected) => selected !== group)
+      : [...current, group]);
     setSelectedCategoryIds([]);
-    if (group === 'accessories') setMinFlightMinutes(undefined);
+    if (group !== 'drones') setMinFlightMinutes(undefined);
   };
 
   const toggleCategory = (category: ProductCategory) => {
@@ -198,14 +230,13 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
     try {
       const nextPage = await productRepository.listProducts({
         search,
-        categoryIds: selectedCategoryIds,
+        categoryIds: categoryFilterIds,
         brand,
-        productTypes: selectedGroup ? GROUP_TYPES[selectedGroup] : undefined,
         isOffer: isOfferOnly,
         isFeatured: isFeaturedOnly,
         minPrice: selectedBudgetRange.minPrice,
         maxPrice: selectedBudgetRange.maxPrice,
-        minFlightMinutes,
+        minFlightMinutes: selectedFlightFilter,
         sortBy,
         page: pageResult.page + 1,
         pageSize: PAGE_SIZE,
@@ -221,7 +252,7 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
   };
 
   const clearFilters = () => {
-    setSelectedGroup(null);
+    setSelectedGroups([]);
     setSelectedCategoryIds([]);
     setBrand(undefined);
     setBudgetRangeId('all');
@@ -266,15 +297,22 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
           label="Drones"
           icon="quadcopter"
           count={typeCounts.drones}
-          selected={selectedGroup === 'drones'}
+          selected={selectedGroups.includes('drones')}
           onPress={() => toggleGroup('drones')}
         />
         <CatalogGroupChip
-          label="Accesorios y repuestos"
+          label="Accesorios"
           icon="toolbox-outline"
           count={typeCounts.accessories}
-          selected={selectedGroup === 'accessories'}
+          selected={selectedGroups.includes('accessories')}
           onPress={() => toggleGroup('accessories')}
+        />
+        <CatalogGroupChip
+          label="Repuestos"
+          icon="cog-outline"
+          count={typeCounts.spare_parts}
+          selected={selectedGroups.includes('spare_parts')}
+          onPress={() => toggleGroup('spare_parts')}
         />
       </ScrollView>
 
@@ -317,6 +355,9 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
           </TouchableOpacity>
       </View>
       <View style={styles.catalogSortRow}>
+        <Text style={styles.catalogResultCount} accessibilityLiveRegion="polite">
+          {isLoading ? 'Buscando productos…' : hasError ? 'No disponible' : `${(pageResult?.total ?? 0).toLocaleString('es')} productos`}
+        </Text>
         <View style={styles.catalogSortContainer}>
           <TouchableOpacity
             style={styles.catalogSortButton}
@@ -379,7 +420,13 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
       ) : pageResult?.items.length ? (
         <View style={styles.catalogProducts}>
           {pageResult.items.map((product) => (
-            <ProductListItem key={product.id} product={product} onAdd={onAddProduct} onOpen={onOpenProduct} />
+            <ProductListItem
+              key={product.id}
+              product={product}
+              onAdd={onAddProduct}
+              onOpen={onOpenProduct}
+              showFeaturedBadge
+            />
           ))}
           {pageResult.items.length < pageResult.total && (
             <TouchableOpacity style={styles.catalogLoadMore} onPress={loadMore} disabled={isLoadingMore}>
@@ -435,7 +482,7 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
                   onPress={() => setBudgetRangeId(range.id)}
                 />
               ))}
-              {selectedGroup !== 'accessories' && (
+                          {selectedGroups.length === 0 || (selectedGroups.length === 1 && selectedGroups[0] === 'drones') ? (
                 <>
                   <Text style={styles.filterSectionTitle}>Autonomía mínima</Text>
                   <FilterChoice
@@ -454,7 +501,7 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
                     />
                   ))}
                 </>
-              )}
+              ) : null}
             </ScrollView>
             <TouchableOpacity
               style={styles.applyFiltersButton}

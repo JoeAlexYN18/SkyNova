@@ -41,10 +41,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAuth();
   const [carts, dispatch] = useReducer(cartReducer, {});
   const lines = useMemo(() => currentUser ? carts[currentUser.id] ?? [] : [], [carts, currentUser]);
+  const totals = useMemo(() => {
+    let itemCount = 0;
+    let subtotal = 0;
+    for (const line of lines) {
+      itemCount += line.quantity;
+      subtotal += line.product.price * line.quantity;
+    }
+    return { itemCount, subtotal };
+  }, [lines]);
   const value = useMemo(() => ({
     lines,
-    itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
-    subtotal: lines.reduce((sum, line) => sum + line.product.price * line.quantity, 0),
+    ...totals,
     addProduct: (product: Product) => {
       if (!currentUser || product.stockQuantity <= 0) return false;
       const existing = lines.find((line) => line.product.id === product.id);
@@ -55,7 +63,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     removeProduct: (productId: string) => { if (currentUser) dispatch({ type: 'remove', userId: currentUser.id, productId }); },
     setQuantity: (productId: string, quantity: number) => { if (currentUser) dispatch({ type: 'quantity', userId: currentUser.id, productId, quantity }); },
     clearCart: () => { if (currentUser) dispatch({ type: 'clear', userId: currentUser.id }); },
-  }), [lines, currentUser]);
+  }), [lines, totals, currentUser]);
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 

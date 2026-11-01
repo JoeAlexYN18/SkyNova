@@ -1,6 +1,6 @@
 
 export const DEMO_CREDENTIALS = {
-  email: 'joealexyn18@skynova.aero',
+  email: 'Joe@outlook.com',
   username: 'JoeAlexYN18',
-  password: 'JosephYNZ20000',
+  password: 'JosephYNZ2000',
 } as const;

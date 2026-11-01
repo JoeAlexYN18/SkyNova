@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Redirect } from 'expo-router';
-import { Alert, ScrollView, StatusBar, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, BackHandler, Easing, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Product, ProductBrand, ProductCategory } from '@/domain/entities/Product';
-import type { OrderStatus } from '@/domain/entities/Order';
+import type { CheckoutInput, Order, OrderStatus } from '@/domain/entities/Order';
 import type { HomeProductCollections } from '@/domain/repositories/IProductRepository';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useCart } from '@/infrastructure/context/CartContext';
@@ -15,17 +15,20 @@ import { BrandLogo } from '@/presentation/components/BrandLogo';
 import { CatalogFeed, type CatalogInitialFilters } from '@/presentation/components/CatalogFeed';
 import { CartFeed } from '@/presentation/components/CartFeed';
 import { ProductDetailModal } from '@/presentation/components/ProductDetailModal';
+import { OrderDetailsModal } from '@/presentation/components/OrderDetailsModal';
 import { HomeFeed, type CatalogEntryOptions } from '@/presentation/components/HomeFeed';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
 import { colors } from '@/shared/theme';
+import { formatCurrency } from '@/shared/utils/formatCurrency';
 
 type Section = 'Inicio' | 'Catálogo' | 'Carrito' | 'Perfil';
 export function HomeScreen() {
   const { currentUser, logout } = useAuth();
   const { itemCount, lines: cartLines, addProduct } = useCart();
-  const { orders, cancelOrder, unreadOrderCount, markOrdersRead } = useOrders();
+  const { orders, cancelOrder, updateOrder, unreadOrderCount, markOrdersRead } = useOrders();
   const { show } = useToast();
   const [showOrderHistory, setShowOrderHistory] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [brands, setBrands] = useState<ProductBrand[]>([]);
@@ -34,6 +37,29 @@ export function HomeScreen() {
   const [section, setSection] = useState<Section>('Inicio');
   const [catalogInitialFilters, setCatalogInitialFilters] = useState<CatalogInitialFilters>({});
   const [openCatalogFilters, setOpenCatalogFilters] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutFlight] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      BackHandler.exitApp();
+      return true;
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    Animated.timing(logoutFlight, {
+      toValue: 1,
+      duration: 1100,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) logout();
+    });
+  }, [isLoggingOut, logout, logoutFlight]);
 
   const navigateToCatalog = useCallback((options: CatalogEntryOptions = {}) => {
     const { openFilters = false, ...filters } = options;
@@ -45,6 +71,7 @@ export function HomeScreen() {
 
   const navigateToSection = useCallback((nextSection: Section) => {
     setSection(nextSection);
+    if (nextSection === 'Perfil') setShowOrderHistory(false);
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   }, []);
 
@@ -65,29 +92,41 @@ export function HomeScreen() {
     return () => { active = false; };
   }, []);
 
+  const userOrders = useMemo(
+    () => currentUser
+      ? orders
+        .filter((order) => order.userId === currentUser.id)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      : [],
+    [orders, currentUser],
+  );
+  const selectedOrder = useMemo(
+    () => orders.find((order) => order.id === selectedOrderId) ?? null,
+    [orders, selectedOrderId],
+  );
+
   if (!currentUser) return <Redirect href={'/login' as never} />;
 
   const firstName = currentUser.fullName.trim().split(/\s+/)[0];
-  const userOrders = orders
-    .filter((order) => order.userId === currentUser.id && order.status !== 'cancelled')
-    .slice()
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const unreadOrders = unreadOrderCount(currentUser.id);
+  const activeOrders = userOrders.filter((order) => order.status === 'pending' || order.status === 'paid' || order.status === 'shipped');
+  const deliveredOrders = userOrders.filter((order) => order.status === 'delivered');
+  const cancelledOrderCount = userOrders.filter((order) => order.status === 'cancelled').length;
+  const orderSummary = [
+    activeOrders.length > 0 && `${activeOrders.length} en curso`,
+    deliveredOrders.length > 0 && `${deliveredOrders.length} entregado${deliveredOrders.length === 1 ? '' : 's'}`,
+    cancelledOrderCount > 0 && `${cancelledOrderCount} cancelado${cancelledOrderCount === 1 ? '' : 's'}`,
+  ].filter(Boolean).join(' · ') || 'Sin pedidos';
 
-  const toggleOrderHistory = () => {
+  const openOrderHistory = () => {
     markOrdersRead(currentUser.id);
-    setShowOrderHistory((value) => !value);
+    setShowOrderHistory(true);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
   };
 
-  const confirmCancelOrder = (orderId: string) => {
-    Alert.alert(
-      '¿Cancelar este pedido?',
-      'El pedido se marcará como cancelado. Esta acción no se puede deshacer.',
-      [
-        { text: 'Volver', style: 'cancel' },
-        { text: 'Cancelar pedido', style: 'destructive', onPress: () => cancelOrder(orderId, currentUser.id) },
-      ],
-    );
+  const openOrdersFromCheckout = () => {
+    setSection('Perfil');
+    openOrderHistory();
   };
 
   return (
@@ -123,35 +162,67 @@ export function HomeScreen() {
             onOpenProduct={setSelectedProduct}
           />
         ) : section === 'Carrito' ? (
-          <CartFeed onBrowseCatalog={navigateToCatalog} onOpenProduct={setSelectedProduct} />
+          <CartFeed
+            key={currentUser.id}
+            onBrowseCatalog={navigateToCatalog}
+            onOpenProduct={setSelectedProduct}
+            onViewOrders={openOrdersFromCheckout}
+          />
         ) : (
-          <View style={styles.profileCard}>
-            <View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>{firstName.slice(0, 1).toUpperCase()}</Text></View>
-            <Text style={styles.profileName}>{currentUser.fullName}</Text>
-            <Text style={styles.profileEmail}>{currentUser.email}</Text>
-            <View style={styles.profileDivider} />
-            <TouchableOpacity style={styles.profileOrdersButton} onPress={toggleOrderHistory} accessibilityRole="button" accessibilityState={{ expanded: showOrderHistory }}>
-              <View style={styles.profileOrdersIcon}><MaterialCommunityIcons name="clipboard-list-outline" size={20} color={colors.primary} /></View>
-              <View style={styles.profileOrdersCopy}><Text style={styles.profileOrdersTitle}>Mis pedidos</Text><Text style={styles.profileOrdersSubtitle}>{userOrders.length} {userOrders.length === 1 ? 'pedido' : 'pedidos'}</Text></View>
-              <View style={styles.orderRowActions}>
-                {unreadOrders > 0 && <View style={styles.profileOrdersBadge}><Text style={styles.profileOrdersBadgeText}>{unreadOrders > 99 ? '99+' : unreadOrders}</Text></View>}
-                <MaterialCommunityIcons name={showOrderHistory ? 'chevron-up' : 'chevron-right'} size={22} color={colors.textMuted} />
+          showOrderHistory ? (
+            <View style={styles.orderPage}>
+              <TouchableOpacity style={styles.orderBackButton} onPress={() => setShowOrderHistory(false)} accessibilityRole="button">
+                <MaterialCommunityIcons name="arrow-left" size={20} color={colors.primary} />
+                <Text style={styles.orderBackText}>Perfil</Text>
+              </TouchableOpacity>
+              <View style={styles.orderPageHeading}>
+                <View>
+                  <Text style={styles.sectionTitle}>Mis pedidos</Text>
+                  <Text style={styles.sectionSubtitle}>{userOrders.length} {userOrders.length === 1 ? 'pedido' : 'pedidos'} en total</Text>
+                </View>
+                <View style={styles.profileOrdersIcon}><MaterialCommunityIcons name="clipboard-list-outline" size={21} color={colors.primary} /></View>
               </View>
-            </TouchableOpacity>
-            {showOrderHistory && <View style={styles.orderHistory}>
-              {userOrders.length === 0 ? <Text style={styles.orderEmpty}>Aún no tienes pedidos. Tus compras aparecerán aquí.</Text> : userOrders.map((order) => <View key={order.id} style={styles.orderCard}>
-                <View style={styles.orderCardHeader}><Text style={styles.orderNumber}>Pedido #{order.id.slice(-8).toUpperCase()}</Text><OrderStatusBadge status={order.status} /></View>
-                <Text style={styles.orderDate}>{new Date(order.createdAt).toLocaleDateString('es-CO')} · {order.items.length} {order.items.length === 1 ? 'artículo' : 'artículos'}</Text>
-                <Text style={styles.orderItemNames} numberOfLines={2}>{order.items.map((item) => `${item.productName} ×${item.quantity}`).join(' · ')}</Text>
-                <View style={styles.orderDetailsRow}><Text style={styles.orderAddress} numberOfLines={1}>{order.shippingAddress.line1}, {order.shippingAddress.city}</Text><Text style={styles.orderTotal}>{formatOrderTotal(order.items, order.currency)}</Text></View>
-                {(order.status === 'pending' || order.status === 'paid') && <TouchableOpacity onPress={() => confirmCancelOrder(order.id)} style={styles.cancelOrderButton}><MaterialCommunityIcons name="close-circle-outline" size={16} color={colors.danger} /><Text style={styles.cancelOrderText}>Cancelar pedido</Text></TouchableOpacity>}
-              </View>)}
-            </View>}
-            <View style={styles.profileDivider} />
-            <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-              <MaterialCommunityIcons name="logout" size={19} color={colors.danger} /><Text style={styles.logoutText}>Cerrar sesión</Text>
-            </TouchableOpacity>
-          </View>
+              {userOrders.length === 0 ? (
+                <View style={styles.orderEmptyCard}>
+                  <View style={styles.emptyIcon}><MaterialCommunityIcons name="package-variant-closed" size={36} color={colors.primary} /></View>
+                  <Text style={styles.orderEmptyTitle}>Aún no tienes pedidos</Text>
+                  <Text style={styles.orderEmpty}>Cuando confirmes una compra, podrás seguir su estado aquí.</Text>
+                  <TouchableOpacity style={styles.primaryButton} onPress={() => navigateToSection('Catálogo')}>
+                    <Text style={styles.primaryButtonText}>Explorar catálogo</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.orderHistory}>
+                  <OrderSection title="En curso" orders={activeOrders} onSelect={setSelectedOrderId} />
+                  <OrderSection title="Entregados" orders={deliveredOrders} onSelect={setSelectedOrderId} />
+                  <OrderSection
+                    title="Cancelados"
+                    orders={userOrders.filter((order) => order.status === 'cancelled')}
+                    onSelect={setSelectedOrderId}
+                  />
+                </View>
+              )}
+            </View>
+          ) : (
+            <View style={styles.profileCard}>
+              <View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>{firstName.slice(0, 1).toUpperCase()}</Text></View>
+              <Text style={styles.profileName}>{currentUser.fullName}</Text>
+              <Text style={styles.profileEmail}>{currentUser.email}</Text>
+              <View style={styles.profileDivider} />
+              <TouchableOpacity style={styles.profileOrdersButton} onPress={openOrderHistory} accessibilityRole="button">
+                <View style={styles.profileOrdersIcon}><MaterialCommunityIcons name="clipboard-list-outline" size={20} color={colors.primary} /></View>
+                <View style={styles.profileOrdersCopy}><Text style={styles.profileOrdersTitle}>Mis pedidos</Text><Text style={styles.profileOrdersSubtitle}>{orderSummary}</Text></View>
+                <View style={styles.orderRowActions}>
+                  {unreadOrders > 0 && <View style={styles.profileOrdersBadge}><Text style={styles.profileOrdersBadgeText}>{unreadOrders > 99 ? '99+' : unreadOrders}</Text></View>}
+                  <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textMuted} />
+                </View>
+              </TouchableOpacity>
+              <View style={styles.profileDivider} />
+              <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} disabled={isLoggingOut}>
+                <MaterialCommunityIcons name="logout" size={19} color={colors.danger} /><Text style={styles.logoutText}>Cerrar sesión</Text>
+              </TouchableOpacity>
+            </View>
+          )
         )}
       </ScrollView>
 
@@ -184,10 +255,67 @@ export function HomeScreen() {
           navigateToSection('Carrito');
         }}
       />
+      <OrderDetailsModal
+        key={selectedOrder?.id ?? 'no-order'}
+        order={selectedOrder}
+        onClose={() => setSelectedOrderId(null)}
+        onSaveAddress={async (address: CheckoutInput) => {
+          if (!selectedOrder) return;
+          await updateOrder(selectedOrder.id, currentUser.id, {
+            shippingAddress: {
+              ...selectedOrder.shippingAddress,
+              recipient: address.recipient.trim(),
+              phone: address.phone.trim(),
+              line1: address.line1.trim(),
+              city: address.city.trim(),
+              region: address.region.trim() || undefined,
+              postalCode: address.postalCode.trim() || undefined,
+              countryCode: address.countryCode.trim().toUpperCase(),
+            },
+          });
+        }}
+        onCancel={async () => {
+          if (!selectedOrder) return;
+          await cancelOrder(selectedOrder.id, currentUser.id);
+        }}
+      />
+      {isLoggingOut && (
+        <Modal visible transparent={false} animationType="none" statusBarTranslucent onRequestClose={() => {}}>
+        <View style={logoutStyles.overlay}>
+          <Animated.View
+            style={{
+              opacity: logoutFlight.interpolate({ inputRange: [0, 0.15, 0.85, 1], outputRange: [0, 1, 1, 1] }),
+              transform: [
+                { translateY: logoutFlight.interpolate({ inputRange: [0, 1], outputRange: [-100, 140] }) },
+                { translateX: logoutFlight.interpolate({ inputRange: [0, 0.5, 1], outputRange: [45, -20, -65] }) },
+                { scale: logoutFlight.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0.7, 1.2, 0.65] }) },
+                { rotate: logoutFlight.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['14deg', '-10deg', '18deg'] }) },
+              ],
+            }}
+          >
+            <MaterialCommunityIcons name="quadcopter" size={100} color={colors.primary} />
+          </Animated.View>
+          <Text style={logoutStyles.label}>CERRANDO SESIÓN</Text>
+          <Text style={logoutStyles.brand}>SkyNova</Text>
+        </View>
+        </Modal>
+      )}
 
     </SafeAreaView>
   );
 }
+
+const logoutStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  label: { color: colors.primary, fontSize: 12, fontWeight: '800', letterSpacing: 2, marginTop: 28 },
+  brand: { color: colors.textPrimary, fontSize: 28, fontWeight: '800', marginTop: 8 },
+});
 
 function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const labels: Record<OrderStatus, string> = {
@@ -212,5 +340,50 @@ function OrderStatusBadge({ status }: { status: OrderStatus }) {
 
 function formatOrderTotal(items: { quantity: number; unitPrice: number }[], currency: string) {
   const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  return new Intl.NumberFormat('es-CO', { style: 'currency', currency, maximumFractionDigits: 0 }).format(total);
+  return formatCurrency(total, currency);
+}
+
+function OrderSection({
+  title,
+  orders,
+  onSelect,
+}: {
+  title: string;
+  orders: Order[];
+  onSelect: (orderId: string) => void;
+}) {
+  if (orders.length === 0) return null;
+
+  return (
+    <View style={styles.orderSection}>
+      <View style={styles.orderSectionHeading}>
+        <Text style={styles.orderSectionTitle}>{title}</Text>
+        <Text style={styles.orderSectionCount}>{orders.length}</Text>
+      </View>
+      {orders.map((order) => (
+        <View key={order.id} style={styles.orderCard}>
+          <View style={styles.orderCardHeader}>
+            <Text style={styles.orderNumber}>Pedido #{order.id.slice(-8).toUpperCase()}</Text>
+            <OrderStatusBadge status={order.status} />
+          </View>
+          <Text style={styles.orderDate}>
+            {new Date(order.createdAt).toLocaleDateString('es-CO')} · {order.items.length} {order.items.length === 1 ? 'artículo' : 'artículos'}
+          </Text>
+          <Text style={styles.orderItemNames} numberOfLines={2}>
+            {order.items.map((item) => `${item.productName} ×${item.quantity}`).join(' · ')}
+          </Text>
+          <View style={styles.orderDetailsRow}>
+            <Text style={styles.orderAddress} numberOfLines={1}>
+              {order.shippingAddress.line1}, {order.shippingAddress.city}
+            </Text>
+            <Text style={styles.orderTotal}>{formatOrderTotal(order.items, order.currency)}</Text>
+          </View>
+          <TouchableOpacity onPress={() => onSelect(order.id)} style={styles.orderDetailButton} accessibilityRole="button">
+            <Text style={styles.orderDetailButtonText}>Ver detalle y gestionar</Text>
+            <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      ))}
+    </View>
+  );
 }

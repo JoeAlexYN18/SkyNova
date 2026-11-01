@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, router } from 'expo-router';
 import {
   Animated,
   Easing,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
   StatusBar,
@@ -12,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BrandLogo } from '@/presentation/components/BrandLogo';
 import { PasswordField } from '@/presentation/components/PasswordField';
 import { PrimaryButton } from '@/presentation/components/PrimaryButton';
@@ -20,54 +22,53 @@ import { useLoginForm } from '@/presentation/hooks/useLoginForm';
 import { colors, radius, spacing, typography } from '@/shared/theme';
 import { MESSAGES } from '@/shared/constants/messages';
 import { useToast } from '@/infrastructure/context/ToastContext';
-import { useAuth } from '@/infrastructure/context/AuthContext';
 import { DEMO_CREDENTIALS } from '@/infrastructure/data/demoCredentials';
 
 export function LoginScreen() {
   const { state, setIdentifier, setPassword, submit } = useLoginForm();
-  const { login } = useAuth();
   const { show } = useToast();
   const [isFlying, setIsFlying] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
   const actionStarted = useRef(false);
   const [flight] = useState(() => new Animated.Value(0));
 
-  useEffect(() => {
-    if (!isFlying) return;
-    flight.setValue(0);
-    Animated.timing(flight, {
-      toValue: 1,
-      duration: 1400,
-      easing: Easing.inOut(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-    return () => {
-      flight.stopAnimation();
-    };
-  }, [flight, isFlying]);
-
   const handleLogin = async () => {
-    if (actionStarted.current || isStarting || isFlying) return;
+    if (actionStarted.current || isFlying) return;
     actionStarted.current = true;
-    setIsStarting(true);
-    setIsFlying(true);
+    Keyboard.dismiss();
     try {
       const authenticated = await submit();
       if (!authenticated) {
-        await login(DEMO_CREDENTIALS.email, DEMO_CREDENTIALS.password);
+        actionStarted.current = false;
+        return;
       }
-      setTimeout(() => router.replace('/home' as never), 1500);
-    } catch {
+
+      setIsFlying(true);
+      flight.setValue(0);
+      const animationFinished = new Promise<boolean>((resolve) => {
+        Animated.timing(flight, {
+          toValue: 1,
+          duration: 1400,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: false,
+        }).start(({ finished }) => resolve(finished));
+      });
+      const finished = await animationFinished;
+      if (finished) {
+        router.replace('/home' as never);
+        return;
+      }
       setIsFlying(false);
       actionStarted.current = false;
+    } catch {
+      setIsFlying(false);
       show(MESSAGES.LOGIN_GENERIC_ERROR, 'error');
     } finally {
-      setIsStarting(false);
+      actionStarted.current = false;
     }
   };
 
   const flightStyle = {
-    opacity: flight.interpolate({ inputRange: [0, 0.18, 0.8, 1], outputRange: [0, 1, 1, 0] }),
+    opacity: flight.interpolate({ inputRange: [0, 0.18, 0.8, 1], outputRange: [0, 1, 1, 1] }),
     transform: [
       { translateY: flight.interpolate({ inputRange: [0, 1], outputRange: [160, -200] }) },
       { translateX: flight.interpolate({ inputRange: [0, 0.5, 1], outputRange: [-35, 25, 70] }) },
@@ -81,13 +82,15 @@ export function LoginScreen() {
       <StatusBar barStyle="light-content" />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
       >
         <ScrollView
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          scrollsChildToFocus
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
@@ -119,7 +122,7 @@ export function LoginScreen() {
                 rightOfLabel={
                   <Text
                     style={styles.forgotLink}
-                    onPress={() => show(MESSAGES.PASSWORD_RECOVERY_UNAVAILABLE, 'info')}
+                    onPress={() => router.push('/forgot-password' as never)}
                     accessibilityRole="link"
                   >
                     ¿Olvidaste tu contraseña?
@@ -130,13 +133,9 @@ export function LoginScreen() {
               <PrimaryButton
                 title="Iniciar sesión"
                 icon="log-in"
-                loading={state.isSubmitting || isStarting || isFlying}
-                onPress={handleLogin}
-                onPressIn={handleLogin}
+                loading={state.isSubmitting || isFlying}
+                onPress={() => { void handleLogin(); }}
               />
-              <Text style={styles.demoHint}>
-                Usuario: {DEMO_CREDENTIALS.username} · Contraseña: {DEMO_CREDENTIALS.password}
-              </Text>
             </View>
 
             <Text style={styles.registerPrompt}>
@@ -153,11 +152,10 @@ export function LoginScreen() {
       </KeyboardAvoidingView>
       {isFlying && (
         <View style={styles.flightOverlay}>
-          <View style={styles.flightGlow} />
           <Animated.View style={flightStyle}>
-            <BrandLogo size={132} iconSize={94} />
+            <MaterialCommunityIcons name="quadcopter" size={94} color={colors.primary} />
           </Animated.View>
-          <Text style={styles.flightText}>PREPARANDO EL DESPEGUE</Text>
+          <Text style={styles.flightText}>INICIANDO SESIÓN</Text>
           <Text style={styles.flightBrand}>SkyNova</Text>
         </View>
       )}
@@ -175,25 +173,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  flightGlow: {
-    position: 'absolute',
-    width: 230,
-    height: 230,
-    borderRadius: 120,
-    backgroundColor: 'rgba(34, 211, 238, 0.08)',
-    shadowColor: colors.primary,
-    shadowOpacity: 0.8,
-    shadowRadius: 70,
-    elevation: 20,
-  },
-  flightText: { ...typography.badge, color: colors.primary, marginTop: spacing.xxl, letterSpacing: 2 },
+  flightText: { color: colors.primary, fontSize: 12, fontWeight: '800', marginTop: 28, letterSpacing: 2 },
   flightBrand: { ...typography.title, color: colors.textPrimary, marginTop: spacing.xs },
   flex: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     padding: spacing.xl,
-    paddingVertical: spacing.xxl,
+    paddingBottom: spacing.xxxl,
   },
   content: { width: '100%', maxWidth: 420, alignSelf: 'center', alignItems: 'center' },
   badge: {
