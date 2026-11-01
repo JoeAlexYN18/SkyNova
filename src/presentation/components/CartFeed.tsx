@@ -1,3 +1,5 @@
+// Improvement 8
+
 import React, { useMemo, useRef, useState } from 'react';
 import { Image, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,6 +13,7 @@ import type { Product } from '@/domain/entities/Product';
 import { COUNTRIES } from '@/infrastructure/data/countries';
 import { colors } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
+import { validatePhoneNumber } from '@/shared/validators/formValidators';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
 
 interface Props {
@@ -42,6 +45,9 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
   const canSubmit = useMemo(
     () => !!address.recipient.trim() && !!address.phone.trim() && !!address.line1.trim()
       && !!address.city.trim() && !!address.region.trim() && !!address.postalCode.trim()
+      && !address.phone.trim().startsWith('+')
+      && !address.phone.trim().startsWith('00')
+      && !validatePhoneNumber(address.phone, address.countryCode)
       && COUNTRIES.some((country) => country.code === address.countryCode),
     [address],
   );
@@ -266,8 +272,10 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
                 accessibilityLabel={`Número de teléfono, código de país ${selectedCountry.dialCode}`}
               />
             </View>
-            {submittedCheckout && !address.phone.trim() && (
-              <Text style={styles.checkoutFieldError}>Completa este campo para continuar.</Text>
+            {submittedCheckout && validatePhoneNumber(address.phone, address.countryCode) && (
+              <Text style={styles.checkoutFieldError}>
+                {address.phone.trim() ? 'Ingresa un número válido para el país seleccionado.' : 'Completa este campo para continuar.'}
+              </Text>
             )}
           </View>
           {([
