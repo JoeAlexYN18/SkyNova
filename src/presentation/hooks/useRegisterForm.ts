@@ -1,9 +1,11 @@
+// Improvement 10
+
 import { useCallback, useReducer } from 'react';
 import { Country } from '@/domain/entities/Country';
 import {
   EmailAlreadyRegisteredError,
   UsernameTakenError,
-} from '@/domain/usecases/RegisterUserUseCase';
+} from '@/domain/errors/UserErrors';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import {
@@ -49,7 +51,7 @@ export function useRegisterForm(defaultCountry: Country) {
     defaultCountry,
     buildInitialRegisterFormState
   );
-  const { register, logout } = useAuth();
+  const { register } = useAuth();
   const { show } = useToast();
 
   const setField = useCallback(
@@ -82,7 +84,6 @@ export function useRegisterForm(defaultCountry: Country) {
         password: state.values.password,
       });
 
-      logout();
       show(MESSAGES.REGISTER_SUCCESS, 'success');
       dispatch({ type: 'RESET', initialValues: buildInitialRegisterFormState(defaultCountry).values });
       return true;
@@ -98,7 +99,7 @@ export function useRegisterForm(defaultCountry: Country) {
     } finally {
       dispatch({ type: 'SET_SUBMITTING', isSubmitting: false });
     }
-  }, [state.values, register, logout, show, defaultCountry]);
+  }, [state.values, register, show, defaultCountry]);
 
   return { state, setField, submit };
 }
