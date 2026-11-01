@@ -1,3 +1,5 @@
+// Improvement 4
+
 import React, { createContext, useContext, useMemo, useReducer } from 'react';
 import { Product } from '@/domain/entities/Product';
 import { useAuth } from '@/infrastructure/context/AuthContext';
@@ -23,7 +25,9 @@ function cartReducer(state: Record<string, CartLine[]>, action: CartAction): Rec
       return quantity > 0 ? [{ ...line, quantity }] : [];
     }) };
   }
-  return action.product.stockQuantity > 0 ? { ...state, [action.userId]: [...lines, { product: action.product, quantity: 1 }] } : state;
+  return action.product.isActive && action.product.stockQuantity > 0
+    ? { ...state, [action.userId]: [...lines, { product: action.product, quantity: 1 }] }
+    : state;
 }
 
 interface CartValue {
@@ -54,7 +58,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     lines,
     ...totals,
     addProduct: (product: Product) => {
-      if (!currentUser || product.stockQuantity <= 0) return false;
+      if (!currentUser || !product.isActive || product.stockQuantity <= 0) return false;
       const existing = lines.find((line) => line.product.id === product.id);
       if (existing && existing.quantity >= product.stockQuantity) return false;
       dispatch({ type: 'add', userId: currentUser.id, product });
