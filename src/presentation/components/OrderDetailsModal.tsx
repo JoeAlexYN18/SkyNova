@@ -1,3 +1,5 @@
+// Improvement 9
+
 import React, { useMemo, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -6,6 +8,7 @@ import { COUNTRIES } from '@/infrastructure/data/countries';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { colors, radius, spacing } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
+import { validatePhoneNumber } from '@/shared/validators/formValidators';
 
 interface Props {
   order: Order | null;
@@ -35,6 +38,7 @@ export function OrderDetailsModal({ order, onClose, onSaveAddress, onCancel }: P
   const canSaveAddress = useMemo(
     () => !!address.recipient.trim() && !!address.phone.trim() && !!address.line1.trim()
       && !!address.city.trim() && !!address.region.trim() && !!address.postalCode.trim()
+      && !validatePhoneNumber(address.phone, address.countryCode)
       && COUNTRIES.some((country) => country.code === address.countryCode),
     [address],
   );
@@ -185,8 +189,12 @@ export function OrderDetailsModal({ order, onClose, onSaveAddress, onCancel }: P
                     }
                     style={styles.input}
                   />
-                  {submittedAddress && !address[key].trim() && (
-                    <Text style={styles.fieldError}>Completa este campo para continuar.</Text>
+                  {submittedAddress && (!address[key].trim() || (key === 'phone' && validatePhoneNumber(address.phone, address.countryCode))) && (
+                    <Text style={styles.fieldError}>
+                      {key === 'phone' && address.phone.trim()
+                        ? 'Ingresa un número válido para el país seleccionado.'
+                        : 'Completa este campo para continuar.'}
+                    </Text>
                   )}
                 </View>
                 ))}
