@@ -2,9 +2,9 @@
 
 ## 1. Descripción del proyecto
 
-SkyNova es un prototipo móvil de una tienda ficticia especializada en drones. Inspirado en el comercio del sector hacia 2026, reúne drones para fotografía, vídeo y vuelo FPV con accesorios y repuestos específicos, como baterías, hélices y filtros. La idea es que cada persona pueda explorar el catálogo, revisar la información disponible y completar una compra desde el teléfono.
+SkyNova es un prototipo móvil de una tienda especializada en drones. Inspirado en el comercio del sector hacia 2026, reúne drones para fotografía, vídeo y vuelo FPV con accesorios y repuestos específicos, como baterías, hélices y filtros. La idea es que cada persona pueda explorar el catálogo, revisar la información disponible y completar una compra desde el teléfono.
 
-El objetivo del proyecto es mostrar ese recorrido de compra y la gestión posterior del pedido. SkyNova no es una app de vuelo, sino una demostración académica de comercio electrónico.
+El objetivo del proyecto es mostrar ese recorrido de compra y la gestión posterior del pedido. SkyNova no es una app de vuelo, sino una demostración seria de comercio electrónico.
 
 ## 2. Core de negocio elegido
 
@@ -55,7 +55,7 @@ Estos comandos requieren Android Studio/JDK o Xcode, según la plataforma. Este 
 5. Edita y guarda la dirección de entrega mientras el pedido esté pendiente o pagado para **actualizarlo**.
 6. **Cancela** el pedido desde su detalle: queda marcado como cancelado y sigue disponible en el historial (borrado lógico, no eliminación definitiva).
 
-Al confirmar el checkout se crea un pedido de demostración en estado `paid`; no se realiza un cobro real. El flujo permite crear, consultar, actualizar y cancelar pedidos, pero no simula su envío ni entrega.
+Al confirmar el checkout se crea un pedido de demostración en estado `paid`; de esa forma, la funcionalidad se ve directamente, sin preocuparnos por detalles secundarios aún. El flujo permite crear, consultar, actualizar y cancelar pedidos, pero no simula su envío ni entrega.
 
 ## 7. Arquitectura: Clean Architecture
 
