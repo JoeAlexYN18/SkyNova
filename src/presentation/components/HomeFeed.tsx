@@ -6,7 +6,6 @@ import {
   StyleSheet,
   type StyleProp,
   Text,
-  TextInput,
   TouchableOpacity,
   type ViewStyle,
   View,
@@ -17,6 +16,7 @@ import type { ProductSort } from '@/domain/repositories/IProductRepository';
 import { colors } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
+import { ProductSearchBar } from '@/presentation/components/ProductSearchBar';
 
 export type CatalogEntryOptions = {
   search?: string;
@@ -34,8 +34,15 @@ type CatalogNavigation = (filters?: CatalogEntryOptions) => void;
 
 type HomeFeedProps = {
   firstName: string;
+  searchDraft: string;
+  onSearchDraftChange: (value: string) => void;
+  onEnterSearchMode: () => void;
   categories: ProductCategory[];
   brands: ProductBrand[];
+  recentSearches: string[];
+  onRememberSearch: (query: string) => void;
+  suggestionsVisible: boolean;
+  onSuggestionsVisibilityChange: (visible: boolean) => void;
   featured: Product[];
   accessories: Product[];
   onNavigateCatalog: CatalogNavigation;
@@ -45,16 +52,21 @@ type HomeFeedProps = {
 
 export function HomeFeed({
   firstName,
+  searchDraft,
+  onSearchDraftChange,
+  onEnterSearchMode,
   categories,
   brands,
+  recentSearches,
+  onRememberSearch,
+  suggestionsVisible,
+  onSuggestionsVisibilityChange,
   featured,
   accessories,
   onNavigateCatalog,
   onAddProduct,
   onOpenProduct,
 }: HomeFeedProps) {
-  const [searchDraft, setSearchDraft] = useState('');
-
   return (
     <>
       <View style={styles.welcome}>
@@ -63,39 +75,28 @@ export function HomeFeed({
         <Text style={styles.subtitle}>Drones, accesorios y repuestos seleccionados para llevar cada vuelo más lejos.</Text>
       </View>
 
-      <View style={styles.searchBox}>
-        <MaterialCommunityIcons name="magnify" size={21} color={colors.primary} />
-        <TextInput
-          value={searchDraft}
-          onChangeText={setSearchDraft}
-          onSubmitEditing={() => onNavigateCatalog({ search: searchDraft.trim() })}
-          placeholder="Drones, marcas, repuestos o accesorios"
-          placeholderTextColor={colors.placeholder}
-          style={styles.searchInput}
-          returnKeyType="search"
-          accessibilityLabel="Buscar en el catálogo"
-        />
-        {!!searchDraft && (
-          <TouchableOpacity onPress={() => setSearchDraft('')}>
-            <MaterialCommunityIcons name="close-circle" size={19} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={() => onNavigateCatalog({ search: searchDraft.trim() || undefined, openFilters: true })}
-          accessibilityRole="button"
-          accessibilityLabel="Abrir filtros del catálogo"
-        >
-          <MaterialCommunityIcons name="tune-variant" size={19} color={colors.textPrimary} />
-        </TouchableOpacity>
-      </View>
+      <ProductSearchBar
+        value={searchDraft}
+        suggestionsVisible={suggestionsVisible}
+        onDraftChange={onSearchDraftChange}
+        categories={categories}
+        brands={brands}
+        recentSearches={recentSearches}
+        onSearch={(search) => onNavigateCatalog({ search })}
+        onRememberSearch={onRememberSearch}
+        onOpenProduct={onOpenProduct}
+        onSelectCategory={(category) => onNavigateCatalog({ categoryId: category.id })}
+        onSelectBrand={(brand) => onNavigateCatalog({ brand: brand.name })}
+        onSuggestionsVisibilityChange={onSuggestionsVisibilityChange}
+        onEnterSearchMode={onEnterSearchMode}
+      />
 
       <View style={styles.compactHeading}>
         <Text style={styles.compactHeadingTitle}>CATEGORÍAS MÁS BUSCADAS</Text>
         <Text style={styles.compactHeadingAction}>TOP 5</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        {categories.map((category) => (
+        {categories.slice(0, 5).map((category) => (
           <TouchableOpacity key={category.id} style={styles.chip} onPress={() => onNavigateCatalog({ categoryId: category.id })}>
             <Text style={styles.chipText}>{category.name}</Text>
             <MaterialCommunityIcons name={category.icon as never} size={13} color={colors.textSecondary} />

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -15,6 +14,7 @@ import type { Product, ProductBrand, ProductCategory } from '@/domain/entities/P
 import type { ProductPage, ProductSort } from '@/domain/repositories/IProductRepository';
 import { productRepository } from '@/infrastructure/container';
 import { ProductListItem, type CatalogEntryOptions } from '@/presentation/components/HomeFeed';
+import { ProductSearchBar } from '@/presentation/components/ProductSearchBar';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
 import { colors } from '@/shared/theme';
 
@@ -22,9 +22,17 @@ export type CatalogInitialFilters = Omit<CatalogEntryOptions, 'openFilters'>;
 
 type CatalogFeedProps = {
   initialFilters: CatalogInitialFilters;
+  searchDraft: string;
+  onSearchDraftChange: (value: string) => void;
+  onEnterSearchMode: () => void;
+  onRegisterSearchHandler: (handler: ((query: string) => void) | null) => void;
   openFiltersOnStart: boolean;
   onAddProduct: (product: Product) => void;
   onOpenProduct: (product: Product) => void;
+  recentSearches: string[];
+  onRememberSearch: (query: string) => void;
+  suggestionsVisible: boolean;
+  onSuggestionsVisibilityChange: (visible: boolean) => void;
 };
 
 type CatalogGroup = 'drones' | 'accessories' | 'spare_parts';
@@ -57,7 +65,20 @@ const BUDGET_RANGES: BudgetRange[] = [
 ];
 const MIN_FLIGHT_OPTIONS = [20, 30, 40, 50] as const;
 
-export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, onOpenProduct }: CatalogFeedProps) {
+export function CatalogFeed({
+  initialFilters,
+  searchDraft,
+  onSearchDraftChange,
+  onEnterSearchMode,
+  onRegisterSearchHandler,
+  openFiltersOnStart,
+  onAddProduct,
+  onOpenProduct,
+  recentSearches,
+  onRememberSearch,
+  suggestionsVisible,
+  onSuggestionsVisibilityChange,
+}: CatalogFeedProps) {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [brands, setBrands] = useState<ProductBrand[]>([]);
   const [search, setSearch] = useState(initialFilters.search ?? '');
@@ -93,6 +114,31 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
     || (selectedGroups.length === 1 && selectedGroups[0] === 'drones')
     ? minFlightMinutes
     : undefined;
+  const canReturnToFullCatalog = Boolean(
+    search.trim()
+    || selectedGroups.length
+    || selectedCategoryIds.length
+    || brand
+    || budgetRangeId !== 'all'
+    || minFlightMinutes
+    || isOfferOnly
+    || isFeaturedOnly
+    || sortBy !== 'relevance',
+  );
+  const selectSuggestedCategory = (category: ProductCategory) => {
+    const categoryGroup = (Object.keys(GROUP_CATEGORY_IDS) as CatalogGroup[])
+      .find((group) => GROUP_CATEGORY_IDS[group].includes(category.id));
+    setSelectedGroups(categoryGroup ? [categoryGroup] : []);
+    setSelectedCategoryIds([category.id]);
+    setBrand(undefined);
+    setSearch('');
+  };
+  const selectSuggestedBrand = (suggestedBrand: ProductBrand) => {
+    setSelectedGroups([]);
+    setSelectedCategoryIds([]);
+    setBrand(suggestedBrand.name);
+    setSearch('');
+  };
 
   useEffect(() => {
     let active = true;
@@ -251,7 +297,9 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
     }
   };
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
+    setSearch('');
+    onSearchDraftChange('');
     setSelectedGroups([]);
     setSelectedCategoryIds([]);
     setBrand(undefined);
@@ -259,38 +307,51 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
     setMinFlightMinutes(undefined);
     setIsOfferOnly(false);
     setIsFeaturedOnly(false);
+    setSortBy('relevance');
     setIsFilterVisible(false);
-  };
+    setIsSortVisible(false);
+    setReloadKey((current) => current + 1);
+  }, [onSearchDraftChange]);
+
+  useEffect(() => {
+    onRegisterSearchHandler((query) => {
+      if (!query) {
+        clearFilters();
+        return;
+      }
+      setSearch(query);
+    });
+    return () => onRegisterSearchHandler(null);
+  }, [clearFilters, onRegisterSearchHandler]);
 
   const selectedSortLabel = SORT_OPTIONS.find((option) => option.value === sortBy)?.label ?? 'Relevancia';
 
   return (
     <>
-      <View style={[styles.searchBox, styles.catalogSearchBox]}>
-        <MaterialCommunityIcons name="magnify" size={22} color={colors.primary} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Drones, marcas, repuestos o accesorios"
-          placeholderTextColor={colors.placeholder}
-          style={styles.searchInput}
-          returnKeyType="search"
-          accessibilityLabel="Buscar productos del catálogo"
-        />
-        {!!search && (
-          <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Borrar búsqueda">
-            <MaterialCommunityIcons name="close-circle" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={() => setIsFilterVisible(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Abrir filtros del catálogo"
-        >
-          <MaterialCommunityIcons name="tune-variant" size={21} color={colors.textPrimary} />
-        </TouchableOpacity>
-      </View>
+      <ProductSearchBar
+        value={searchDraft}
+        suggestionsVisible={suggestionsVisible}
+        onDraftChange={onSearchDraftChange}
+        categories={categories}
+        brands={brands}
+        recentSearches={recentSearches}
+        onSearch={(query) => {
+          if (!query) {
+            clearFilters();
+            return;
+          }
+          setSearch(query);
+        }}
+        onRememberSearch={onRememberSearch}
+        onOpenProduct={onOpenProduct}
+        onSelectCategory={selectSuggestedCategory}
+        onSelectBrand={selectSuggestedBrand}
+        onSuggestionsVisibilityChange={onSuggestionsVisibilityChange}
+        onEnterSearchMode={onEnterSearchMode}
+        canReturnToFullCatalog={canReturnToFullCatalog}
+        onReturnToFullCatalog={clearFilters}
+        catalog
+      />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catalogGroupRow}>
         <CatalogGroupChip
@@ -352,6 +413,16 @@ export function CatalogFeed({ initialFilters, openFiltersOnStart, onAddProduct, 
           >
             <MaterialCommunityIcons name="trophy-outline" size={15} color={isFeaturedOnly ? colors.onPrimary : '#FFD66E'} />
             <Text style={[styles.catalogQuickText, isFeaturedOnly && styles.catalogFilterTextActive]}>Destacados</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.catalogAdvancedFilterButton}
+            onPress={() => setIsFilterVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir filtros avanzados del catálogo"
+            accessibilityState={{ expanded: isFilterVisible }}
+          >
+            <MaterialCommunityIcons name="tune-variant" size={15} color={colors.textSecondary} />
+            <Text style={styles.catalogAdvancedFilterText}>Filtros</Text>
           </TouchableOpacity>
       </View>
       <View style={styles.catalogSortRow}>

@@ -2,9 +2,9 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Redirect } from 'expo-router';
-import { Animated, BackHandler, Easing, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, BackHandler, Easing, Keyboard, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Product, ProductBrand, ProductCategory } from '@/domain/entities/Product';
 import type { CheckoutInput, Order, OrderStatus } from '@/domain/entities/Order';
 import type { HomeProductCollections } from '@/domain/repositories/IProductRepository';
@@ -19,12 +19,14 @@ import { CartFeed } from '@/presentation/components/CartFeed';
 import { ProductDetailModal } from '@/presentation/components/ProductDetailModal';
 import { OrderDetailsModal } from '@/presentation/components/OrderDetailsModal';
 import { HomeFeed, type CatalogEntryOptions } from '@/presentation/components/HomeFeed';
+import { ProductSearchBar } from '@/presentation/components/ProductSearchBar';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
 import { colors } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 
 type Section = 'Inicio' | 'Catálogo' | 'Carrito' | 'Perfil';
 export function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const { currentUser, logout } = useAuth();
   const { itemCount, lines: cartLines, addProduct } = useCart();
   const { orders, cancelOrder, updateOrder, unreadOrderCount, markOrdersRead } = useOrders();
@@ -36,19 +38,56 @@ export function HomeScreen() {
   const [brands, setBrands] = useState<ProductBrand[]>([]);
   const [homeCollections, setHomeCollections] = useState<HomeProductCollections>({ featuredDrones: [], bestSellingAccessories: [] });
   const scrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
+  const [searchTransition] = useState(() => new Animated.Value(0));
   const [section, setSection] = useState<Section>('Inicio');
   const [catalogInitialFilters, setCatalogInitialFilters] = useState<CatalogInitialFilters>({});
+  const [catalogFeedKey, setCatalogFeedKey] = useState(0);
+  const [searchDraft, setSearchDraft] = useState('');
+  const [isSearchMode, setIsSearchMode] = useState(false);
   const [openCatalogFilters, setOpenCatalogFilters] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutFlight] = useState(() => new Animated.Value(0));
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [isSearchSuggestionsVisible, setIsSearchSuggestionsVisible] = useState(false);
+  const catalogSearchHandler = useRef<((query: string) => void) | null>(null);
+  const searchDraftBeforeSearchMode = useRef('');
+
+  useEffect(() => {
+    if (!isSearchMode) return;
+    searchTransition.setValue(0);
+    const animation = Animated.timing(searchTransition, {
+      toValue: 1,
+      duration: 180,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [isSearchMode, searchTransition]);
+
+  const rememberSearch = useCallback((query: string) => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) return;
+    setRecentSearches((current) => [
+      trimmedQuery,
+      ...current.filter((recent) => recent.toLocaleLowerCase() !== trimmedQuery.toLocaleLowerCase()),
+    ].slice(0, 5));
+  }, []);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isSearchMode) {
+        setIsSearchMode(false);
+        setIsSearchSuggestionsVisible(false);
+        setSearchDraft(searchDraftBeforeSearchMode.current);
+        Keyboard.dismiss();
+        return true;
+      }
       BackHandler.exitApp();
       return true;
     });
     return () => subscription.remove();
-  }, []);
+  }, [isSearchMode]);
 
   const handleLogout = useCallback(() => {
     if (isLoggingOut) return;
@@ -65,17 +104,58 @@ export function HomeScreen() {
 
   const navigateToCatalog = useCallback((options: CatalogEntryOptions = {}) => {
     const { openFilters = false, ...filters } = options;
+    if (section === 'Catálogo' && (filters.categoryId || filters.brand || openFilters)) {
+      setCatalogFeedKey((current) => current + 1);
+    }
+    setIsSearchMode(false);
+    setIsSearchSuggestionsVisible(false);
+    setSearchDraft(filters.search ?? '');
     setCatalogInitialFilters(filters);
     setOpenCatalogFilters(openFilters);
     setSection('Cat\u00e1logo');
     scrollRef.current?.scrollTo({ y: 0, animated: true });
-  }, []);
+  }, [section]);
 
   const navigateToSection = useCallback((nextSection: Section) => {
+    setIsSearchMode(false);
+    setIsSearchSuggestionsVisible(false);
     setSection(nextSection);
     if (nextSection === 'Perfil') setShowOrderHistory(false);
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   }, []);
+
+  const enterSearchMode = useCallback(() => {
+    searchDraftBeforeSearchMode.current = searchDraft;
+    setIsSearchSuggestionsVisible(false);
+    setIsSearchMode(true);
+  }, [searchDraft]);
+
+  const registerCatalogSearchHandler = useCallback((handler: ((query: string) => void) | null) => {
+    catalogSearchHandler.current = handler;
+  }, []);
+
+  const leaveSearchMode = useCallback(() => {
+    setIsSearchMode(false);
+    setIsSearchSuggestionsVisible(false);
+    Keyboard.dismiss();
+  }, []);
+
+  const cancelSearchMode = useCallback(() => {
+    setSearchDraft(searchDraftBeforeSearchMode.current);
+    leaveSearchMode();
+  }, [leaveSearchMode]);
+
+  const applySearch = useCallback((query: string) => {
+    setSearchDraft(query);
+    setIsSearchMode(false);
+    setIsSearchSuggestionsVisible(false);
+    Keyboard.dismiss();
+    if (section === 'Catálogo') {
+      catalogSearchHandler.current?.(query);
+      return;
+    }
+    navigateToCatalog({ search: query || undefined });
+  }, [navigateToCatalog, section]);
 
   const handleAddProduct = useCallback((product: Parameters<typeof addProduct>[0]) => {
     const added = addProduct(product);
@@ -152,7 +232,13 @@ export function HomeScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
       <StatusBar barStyle="light-content" />
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always"
+        keyboardDismissMode="on-drag"
+      >
         <View style={styles.header}>
           <View style={styles.brand}>
             <BrandLogo size={42} iconSize={27} />
@@ -166,8 +252,15 @@ export function HomeScreen() {
         {section === 'Inicio' ? (
           <HomeFeed
             firstName={firstName}
-            categories={categories.slice(0, 5)}
+            searchDraft={searchDraft}
+            onSearchDraftChange={setSearchDraft}
+            onEnterSearchMode={enterSearchMode}
+            categories={categories}
             brands={brands}
+            recentSearches={recentSearches}
+            onRememberSearch={rememberSearch}
+            suggestionsVisible={isSearchSuggestionsVisible}
+            onSuggestionsVisibilityChange={setIsSearchSuggestionsVisible}
             featured={homeCollections.featuredDrones}
             accessories={homeCollections.bestSellingAccessories}
             onNavigateCatalog={navigateToCatalog}
@@ -176,10 +269,19 @@ export function HomeScreen() {
           />
         ) : section === 'Catálogo' ? (
           <CatalogFeed
+            key={catalogFeedKey}
             initialFilters={catalogInitialFilters}
+            searchDraft={searchDraft}
+            onSearchDraftChange={setSearchDraft}
+            onEnterSearchMode={enterSearchMode}
+            onRegisterSearchHandler={registerCatalogSearchHandler}
             openFiltersOnStart={openCatalogFilters}
             onAddProduct={handleAddProduct}
             onOpenProduct={setSelectedProduct}
+            recentSearches={recentSearches}
+            onRememberSearch={rememberSearch}
+            suggestionsVisible={isSearchSuggestionsVisible}
+            onSuggestionsVisibilityChange={setIsSearchSuggestionsVisible}
           />
         ) : section === 'Carrito' ? (
           <CartFeed
@@ -261,6 +363,43 @@ export function HomeScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {isSearchMode && (
+        <Animated.View
+          style={[
+            styles.searchScreenOverlay,
+            {
+              top: insets.top,
+              right: insets.right,
+              bottom: insets.bottom,
+              left: insets.left,
+              opacity: searchTransition.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+              transform: [{ translateY: searchTransition.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+            },
+          ]}
+        >
+          <ProductSearchBar
+            value={searchDraft}
+            suggestionsVisible={isSearchSuggestionsVisible}
+            onDraftChange={setSearchDraft}
+            categories={categories}
+            brands={brands}
+            recentSearches={recentSearches}
+            onSearch={applySearch}
+            onRememberSearch={rememberSearch}
+            onOpenProduct={(product) => {
+              leaveSearchMode();
+              setSelectedProduct(product);
+            }}
+            onSelectCategory={(category) => navigateToCatalog({ categoryId: category.id })}
+            onSelectBrand={(brand) => navigateToCatalog({ brand: brand.name })}
+            onSuggestionsVisibilityChange={setIsSearchSuggestionsVisible}
+            dedicated
+            onBack={cancelSearchMode}
+            catalog={section === 'Catálogo'}
+          />
+        </Animated.View>
+      )}
 
       <ProductDetailModal
         key={selectedProduct?.id ?? 'no-product'}
@@ -407,4 +546,3 @@ function OrderSection({
     </View>
   );
 }
-

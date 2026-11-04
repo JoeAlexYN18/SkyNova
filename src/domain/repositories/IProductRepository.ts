@@ -36,5 +36,6 @@ export interface IProductRepository {
   listCategories(): Promise<ProductCategory[]>;
   listBrands(): Promise<ProductBrand[]>;
   listHomeCollections(): Promise<HomeProductCollections>;
+  searchSuggestions(query: string, limit?: number): Promise<Product[]>;
   listProducts(query?: ProductQuery): Promise<ProductPage>;
 }

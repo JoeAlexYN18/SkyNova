@@ -49,7 +49,7 @@ Estos comandos requieren Android Studio/JDK o Xcode, según la plataforma. Este 
 ## 6. Cómo probar el flujo CRUD de pedidos
 
 1. Inicia la app e ingresa con la cuenta de demostración que ya aparece en **Login**, o crea una cuenta desde **Registro**.
-2. En **Catálogo**, busca o filtra un dron, accesorio o repuesto; abre su ficha y añádelo al carrito.
+2. En **Catálogo**, escribe para ver sugerencias de productos, marcas y categorías; confirma la búsqueda con el botón o la tecla **Buscar** para actualizar los resultados. También puedes abrir una sugerencia directamente.
 3. En **Carrito**, cambia cantidades o elimina artículos. Luego completa los datos de entrega y confirma la compra para **crear** el pedido. El formulario pide teléfono nacional, sin anteponer el código del país.
 4. En **Perfil → Mis pedidos**, abre el pedido para **consultar** su estado, artículos, total y dirección.
 5. Edita y guarda la dirección de entrega mientras el pedido esté pendiente o pagado para **actualizarlo**.

@@ -204,6 +204,66 @@ const products: Product[] = [
     imageAlt: 'DJI Mavic 3 Pro con control DJI RC',
   },
   {
+    id: 'prod-autel-evo-lite-plus', categoryId: 'cat-drones-4k', sku: 'SN-AUTEL-EVOLITEP',
+    name: 'Autel EVO Lite+',
+    description: 'Dron plegable para fotografía y vídeo aéreo · cámara de alta resolución',
+    productType: 'drone', brand: 'Autel Robotics', price: 1149, currency: 'USD', stockQuantity: 4, maxFlightMinutes: 40,
+    ratingAverage: 4.7, ratingCount: 34, salesCount: 92,
+    isActive: true, isFeatured: true, isHomeVisible: true, createdAt: '2026-10-28T00:00:00Z',
+    imageUrl: 'https://cdn.shopify.com/s/files/1/1538/0803/files/1_2a74d08d-0c93-4f63-816e-b1a7352066ce.png?v=1760996980',
+    imageAlt: 'Dron Autel EVO Lite+ en color naranja',
+  },
+  {
+    id: 'prod-skydio-x10', categoryId: 'cat-drones-4k', sku: 'SN-SKYDIO-X10',
+    name: 'Skydio X10',
+    description: 'Plataforma aérea profesional para inspección, mapeo y operaciones de campo',
+    productType: 'drone', brand: 'Skydio', price: 12499, currency: 'USD', stockQuantity: 2, maxFlightMinutes: 40,
+    ratingAverage: 4.8, ratingCount: 16, salesCount: 38,
+    isActive: true, isFeatured: false, isHomeVisible: false, createdAt: '2026-10-28T00:00:00Z',
+    imageUrl: 'https://cdn.sanity.io/images/mgxz50fq/production-v3-red/22114158c43e8d8b005a075297ffaa0a6a379954-2930x1120.png?w=3000&fit=max&auto=format',
+    imageAlt: 'Dron profesional Skydio X10',
+  },
+  {
+    id: 'prod-betafpv-cetus-x', categoryId: 'cat-fpv-carreras', sku: 'SN-BETAFPV-CETUSX',
+    name: 'BETAFPV Cetus X FPV Kit',
+    description: 'Kit FPV para practicar vuelo inmersivo y maniobras en interiores',
+    productType: 'drone', brand: 'BetaFPV', price: 299, currency: 'USD', stockQuantity: 7, maxFlightMinutes: 5,
+    ratingAverage: 4.6, ratingCount: 29, salesCount: 76,
+    isActive: true, isFeatured: true, isHomeVisible: true, createdAt: '2026-10-28T00:00:00Z',
+    imageUrl: 'https://cdn.shopify.com/s/files/1/1778/6615/products/74b96dbb2d19db9758ba306fc55ad040_54f7f44f-2c02-4260-9cd7-f73550d6f448.jpg?v=1664359398',
+    imageAlt: 'Kit BETAFPV Cetus X con dron FPV, gafas y control remoto',
+  },
+  {
+    id: 'prod-geprc-cinebot30', categoryId: 'cat-fpv-carreras', sku: 'SN-GEPRC-CINEBOT30',
+    name: 'GEPRC Cinebot30 HD O3',
+    description: 'Dron FPV cinewhoop con protectores de hélice para tomas cinematográficas',
+    productType: 'drone', brand: 'GEPRC', price: 629, currency: 'USD', stockQuantity: 3, maxFlightMinutes: 6,
+    ratingAverage: 4.7, ratingCount: 21, salesCount: 57,
+    isActive: true, isFeatured: false, isHomeVisible: false, createdAt: '2026-10-28T00:00:00Z',
+    imageUrl: 'https://geprc.com/wp-content/uploads/2022/11/Cinebot30-HD-O3-FPV-4.jpg',
+    imageAlt: 'Dron FPV GEPRC Cinebot30 HD O3',
+  },
+  {
+    id: 'prod-parrot-anafi-ai', categoryId: 'cat-drones-cine', sku: 'SN-PARROT-ANAFIAI',
+    name: 'Parrot ANAFI Ai',
+    description: 'Dron profesional con conectividad 4G para inspección y captura aérea',
+    productType: 'drone', brand: 'Parrot', price: 3999, currency: 'USD', stockQuantity: 2, maxFlightMinutes: 32,
+    ratingAverage: 4.8, ratingCount: 14, salesCount: 32,
+    isActive: true, isFeatured: true, isHomeVisible: true, createdAt: '2026-10-28T00:00:00Z',
+    imageUrl: 'https://www.parrot.com/assets/s3fs-public/styles/mdlossless/public/2022-06/Anafi-Ai-4G-Connected.jpg',
+    imageAlt: 'Dron profesional Parrot ANAFI Ai',
+  },
+  {
+    id: 'prod-holystone-hs360g', categoryId: 'cat-drones-4k', sku: 'SN-HOLYSTONE-HS360G',
+    name: 'Holy Stone HS360G',
+    description: 'Dron de 249 g con cámara 4K y estabilizador mecánico de 3 ejes',
+    productType: 'drone', brand: 'Holy Stone', price: 299, currency: 'USD', stockQuantity: 8, maxFlightMinutes: 32,
+    ratingAverage: 4.5, ratingCount: 41, salesCount: 68,
+    isActive: true, isFeatured: false, isHomeVisible: false, createdAt: '2026-10-28T00:00:00Z',
+    imageUrl: 'https://static.holystone.com/Uploads/Editor/2026-08-24/6a8b99151f040.webp',
+    imageAlt: 'Dron Holy Stone HS360G con cámara 4K y gimbal de 3 ejes',
+  },
+  {
     id: 'prod-mavic-3-battery-catalog', categoryId: 'cat-baterias', sku: 'SN-DJI-MAVIC3-BAT',
     name: 'Batería inteligente DJI Mavic 3 Series',
     description: 'Batería LiPo 4S de 5000 mAh · hasta 43 min con Mavic 3 Pro',
@@ -213,6 +273,15 @@ const products: Product[] = [
     imageAlt: 'Batería inteligente DJI Mavic 3 Series',
   },
 ];
+
+const categoriesById = new Map(categories.map((category) => [category.id, category]));
+const searchableProducts = products.map((product) => ({
+  product,
+  name: normalizeSearchText(product.name),
+  brand: normalizeSearchText(product.brand),
+  sku: normalizeSearchText(product.sku),
+  text: buildSearchText(product),
+}));
 
 export class InMemoryProductRepository implements IProductRepository {
   async listCategories() { return categories.map((category) => ({ ...category })); }
@@ -229,10 +298,22 @@ export class InMemoryProductRepository implements IProductRepository {
     };
   }
 
+  async searchSuggestions(query: string, limit = 5) {
+    const normalizedQuery = normalizeSearchText(query);
+    const terms = getSearchTerms(normalizedQuery);
+    if (terms.length === 0) return [];
+
+    return searchableProducts
+      .filter(({ product, text }) => product.isActive && terms.every((term) => text.includes(term)))
+      .sort((left, right) => scoreSearchMatch(right, normalizedQuery) - scoreSearchMatch(left, normalizedQuery))
+      .slice(0, Math.max(0, limit))
+      .map(({ product }) => cloneProduct(product));
+  }
+
   async listProducts(query: ProductQuery = {}) {
-    const search = query.search?.trim().toLocaleLowerCase() ?? '';
+    const searchTerms = getSearchTerms(query.search ?? '');
     const brand = query.brand?.trim().toLocaleLowerCase();
-    const matches = products.filter((product) => {
+    const matches = searchableProducts.filter(({ product, text }) => {
       if (!product.isActive) return false;
       if (query.categoryId && product.categoryId !== query.categoryId) return false;
       if (query.categoryIds?.length && !query.categoryIds.includes(product.categoryId)) return false;
@@ -244,17 +325,13 @@ export class InMemoryProductRepository implements IProductRepository {
       if (query.maxPrice !== undefined && product.price > query.maxPrice) return false;
       if (query.minFlightMinutes !== undefined && (product.maxFlightMinutes === undefined || product.maxFlightMinutes < query.minFlightMinutes)) return false;
       if (brand && product.brand.trim().toLocaleLowerCase() !== brand) return false;
-      if (!search) return true;
-
-      return `${product.name} ${product.brand} ${product.sku} ${product.description}`
-        .toLocaleLowerCase()
-        .includes(search);
+      return searchTerms.every((term) => text.includes(term));
     });
 
     const sortBy = query.sortBy ?? 'relevance';
     const sortedMatches = sortBy === 'relevance'
-      ? interleaveRelevantProducts(matches)
-      : matches.sort((left, right) => compareProducts(left, right, sortBy));
+      ? interleaveRelevantProducts(matches.map(({ product }) => product))
+      : matches.map(({ product }) => product).sort((left, right) => compareProducts(left, right, sortBy));
 
     const page = Math.max(1, Math.floor(query.page ?? 1));
     const pageSize = Math.max(1, Math.floor(query.pageSize ?? 12));
@@ -267,6 +344,64 @@ export class InMemoryProductRepository implements IProductRepository {
       pageSize,
     };
   }
+}
+
+function buildSearchText(product: Product) {
+  const category = categoriesById.get(product.categoryId);
+  const typeLabels: Record<Product['productType'], string> = {
+    drone: 'dron drone drones aeronave',
+    accessory: 'accesorio accesorios',
+    spare_part: 'repuesto repuestos pieza piezas',
+  };
+  const searchTerms = [
+    product.name,
+    product.brand,
+    `marca ${product.brand}`,
+    product.sku,
+    `sku ${product.sku}`,
+    product.description,
+    category?.name,
+    typeLabels[product.productType],
+    `precio price ${product.price}`,
+    product.currency,
+    product.compareAtPrice,
+    product.compareAtPrice ? 'oferta ofertas offer offers descuento discount' : undefined,
+    product.isFeatured ? 'destacado destacados popular populares' : undefined,
+    product.maxFlightMinutes,
+    product.maxFlightMinutes ? `minutos de vuelo autonomia ${product.maxFlightMinutes} min` : undefined,
+    product.ratingAverage,
+    product.ratingCount,
+    product.ratingAverage ? 'mejor mejor valorado mejor valorados calificacion estrellas rated' : undefined,
+    product.salesCount,
+    product.salesCount ? 'mas vendidos mas vendido bestseller' : undefined,
+    product.createdAt ? 'nuevo nuevos reciente recientes novedad novedades latest' : undefined,
+    product.stockQuantity,
+    product.stockQuantity > 0 ? 'disponible disponibilidad en stock' : 'agotado sin stock',
+  ];
+  return normalizeSearchText(searchTerms.filter((value) => value !== undefined).join(' '));
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getSearchTerms(value: string) {
+  return normalizeSearchText(value).split(/\s+/).filter(Boolean);
+}
+
+function scoreSearchMatch(
+  candidate: { name: string; brand: string; sku: string; text: string },
+  query: string,
+) {
+  if (candidate.name.startsWith(query)) return 4;
+  if (candidate.sku.startsWith(query)) return 3;
+  if (candidate.brand.startsWith(query)) return 2;
+  return candidate.text.includes(query) ? 1 : 0;
 }
 
 function cloneProduct(product: Product): Product {
