@@ -1,6 +1,16 @@
 import type { Product } from '@/domain/entities/Product';
 
 export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled';
+export type PaymentMethod = 'yape' | 'visa';
+export type CardBrand = 'visa' | 'mastercard' | 'amex' | 'discover' | 'other';
+
+export interface OrderPaymentDetails {
+  phone?: string;
+  cardholderName?: string;
+  cardBrand?: CardBrand;
+  cardLast4?: string;
+  cardExpiry?: string;
+}
 
 export interface ShippingAddressSnapshot {
   id: string;
@@ -15,7 +25,7 @@ export interface ShippingAddressSnapshot {
 }
 
 export interface OrderItemSnapshot {
-  productId: string;
+  productId: string | null;
   productName: string;
   sku: string;
   quantity: number;
@@ -27,6 +37,12 @@ export interface Order {
   userId: string;
   shippingAddress: ShippingAddressSnapshot;
   status: OrderStatus;
+  paymentMethod?: PaymentMethod;
+  paymentDetails?: OrderPaymentDetails;
+  syncStatus?: 'pending' | 'synced' | 'error';
+  syncError?: string;
+  receiptLocalUri?: string;
+  receiptStoragePath?: string;
   currency: string;
   items: OrderItemSnapshot[];
   createdAt: string;

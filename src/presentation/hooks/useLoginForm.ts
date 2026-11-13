@@ -1,9 +1,13 @@
 import { useCallback, useState } from 'react';
-import { InvalidPasswordError, UserIdentifierNotFoundError } from '@/domain/usecases/AuthenticateUserUseCase';
+import {
+  InvalidCredentialsError,
+  InvalidPasswordError,
+  UserIdentifierNotFoundError,
+} from '@/domain/usecases/AuthenticateUserUseCase';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { MESSAGES } from '@/shared/constants/messages';
-import { DEMO_CREDENTIALS } from '@/infrastructure/data/demoCredentials';
+import { firebaseConfigured } from '@/infrastructure/data/firebaseServices';
 
 type LoginField = 'identifier' | 'password';
 type LoginErrors = Partial<Record<LoginField, string>>;
@@ -17,8 +21,8 @@ interface LoginFormState {
 
 export function useLoginForm() {
   const [state, setState] = useState<LoginFormState>({
-    identifier: DEMO_CREDENTIALS.username,
-    password: DEMO_CREDENTIALS.password,
+    identifier: '',
+    password: '',
     errors: {},
     isSubmitting: false,
   });
@@ -46,6 +50,8 @@ export function useLoginForm() {
     const identifier = state.identifier.trim();
     if (!identifier) {
       errors.identifier = MESSAGES.LOGIN_IDENTIFIER_REQUIRED;
+    } else if (firebaseConfigured && !identifier.includes('@')) {
+      errors.identifier = MESSAGES.INVALID_EMAIL;
     }
 
     if (Object.keys(errors).length > 0) {
@@ -70,6 +76,12 @@ export function useLoginForm() {
           errors: { password: MESSAGES.LOGIN_INVALID_PASSWORD },
         }));
         show(MESSAGES.LOGIN_INVALID_PASSWORD, 'error');
+      } else if (error instanceof InvalidCredentialsError) {
+        setState((current) => ({
+          ...current,
+          errors: { password: MESSAGES.LOGIN_INVALID_CREDENTIALS },
+        }));
+        show(MESSAGES.LOGIN_INVALID_CREDENTIALS, 'error');
       } else {
         show(MESSAGES.LOGIN_GENERIC_ERROR, 'error');
       }

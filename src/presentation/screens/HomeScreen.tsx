@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Redirect } from 'expo-router';
-import { Animated, BackHandler, Easing, Keyboard, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, BackHandler, Easing, Keyboard, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Product, ProductBrand, ProductCategory } from '@/domain/entities/Product';
@@ -13,11 +13,14 @@ import { useCart } from '@/infrastructure/context/CartContext';
 import { useOrders } from '@/infrastructure/context/OrderContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { productRepository } from '@/infrastructure/container';
+import { COUNTRIES } from '@/infrastructure/data/countries';
 import { BrandLogo } from '@/presentation/components/BrandLogo';
 import { CatalogFeed, type CatalogInitialFilters } from '@/presentation/components/CatalogFeed';
 import { CartFeed } from '@/presentation/components/CartFeed';
 import { ProductDetailModal } from '@/presentation/components/ProductDetailModal';
 import { OrderDetailsModal } from '@/presentation/components/OrderDetailsModal';
+import { AboutSkyNovaModal } from '@/presentation/components/AboutSkyNovaModal';
+import { AccountSettingsModal } from '@/presentation/components/AccountSettingsModal';
 import { HomeFeed, type CatalogEntryOptions } from '@/presentation/components/HomeFeed';
 import { ProductSearchBar } from '@/presentation/components/ProductSearchBar';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
@@ -27,11 +30,13 @@ import { formatCurrency } from '@/shared/utils/formatCurrency';
 type Section = 'Inicio' | 'Catálogo' | 'Carrito' | 'Perfil';
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { currentUser, logout } = useAuth();
-  const { itemCount, lines: cartLines, addProduct } = useCart();
-  const { orders, cancelOrder, updateOrder, unreadOrderCount, markOrdersRead } = useOrders();
+  const { currentUser, isInitializing, logout, updateProfile, deleteAccount } = useAuth();
+  const { itemCount, lines: cartLines, addProduct, waitForPendingWrites, forgetAccountCart } = useCart();
+  const { orders, cancelOrder, updateOrder, unreadOrderCount, markOrdersRead, forgetUserData } = useOrders();
   const { show } = useToast();
   const [showOrderHistory, setShowOrderHistory] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -98,9 +103,14 @@ export function HomeScreen() {
       easing: Easing.inOut(Easing.cubic),
       useNativeDriver: true,
     }).start(({ finished }) => {
-      if (finished) logout();
+      if (!finished) return;
+      void logout().catch((error: unknown) => {
+        setIsLoggingOut(false);
+        logoutFlight.setValue(0);
+        show(error instanceof Error ? error.message : 'No se pudo cerrar la sesión.', 'error');
+      });
     });
-  }, [isLoggingOut, logout, logoutFlight]);
+  }, [isLoggingOut, logout, logoutFlight, show]);
 
   const navigateToCatalog = useCallback((options: CatalogEntryOptions = {}) => {
     const { openFilters = false, ...filters } = options;
@@ -167,15 +177,38 @@ export function HomeScreen() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([productRepository.listCategories(), productRepository.listHomeCollections(), productRepository.listBrands()]).then(([nextCategories, collections, nextBrands]) => {
+    const loadLocalCatalog = async () => {
+      const [nextCategories, collections, nextBrands] = await Promise.all([
+        productRepository.listCategories(),
+        productRepository.listHomeCollections(),
+        productRepository.listBrands(),
+      ]);
       if (active) {
         setCategories(nextCategories);
         setHomeCollections(collections);
         setBrands(nextBrands);
       }
-    });
+    };
+    void (async () => {
+      try {
+        await loadLocalCatalog();
+      } catch (error) {
+        if (active) show(error instanceof Error ? error.message : 'No se pudo cargar el catálogo local.', 'error');
+      }
+      try {
+        const catalogChanged = await productRepository.syncCatalog();
+        if (catalogChanged && active) {
+          await loadLocalCatalog();
+          setCatalogFeedKey((key) => key + 1);
+        }
+      } catch (error) {
+        if (active) show(error instanceof Error
+          ? `Se usará el catálogo local: ${error.message}`
+          : 'No se pudo sincronizar el catálogo; se usará la copia local.', 'info');
+      }
+    })();
     return () => { active = false; };
-  }, []);
+  }, [show]);
 
   const { userOrders, activeOrders, deliveredOrders, cancelledOrders } = useMemo(() => {
     const userOrders = currentUser
@@ -203,10 +236,15 @@ export function HomeScreen() {
     return grouped;
   }, [orders, currentUser]);
   const selectedOrder = useMemo(
-    () => orders.find((order) => order.id === selectedOrderId) ?? null,
-    [orders, selectedOrderId],
+    () => userOrders.find((order) => order.id === selectedOrderId) ?? null,
+    [userOrders, selectedOrderId],
   );
 
+  if (isInitializing) {
+    return <SafeAreaView style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+      <ActivityIndicator color={colors.primary} />
+    </SafeAreaView>;
+  }
   if (!currentUser) return <Redirect href={'/login' as never} />;
 
   const firstName = currentUser.fullName.trim().split(/\s+/)[0];
@@ -240,13 +278,19 @@ export function HomeScreen() {
         keyboardDismissMode="on-drag"
       >
         <View style={styles.header}>
-          <View style={styles.brand}>
+          <TouchableOpacity
+            style={styles.brand}
+            onPress={() => setShowAbout(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Acerca de SkyNova"
+            accessibilityHint="Abre información sobre la tienda y sus datos de contacto"
+          >
             <BrandLogo size={42} iconSize={27} />
             <View>
               <Text style={styles.brandText}>SkyNova</Text>
               <Text style={styles.brandCaption}>DRONES, ACCESORIOS Y REPUESTOS</Text>
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {section === 'Inicio' ? (
@@ -330,6 +374,20 @@ export function HomeScreen() {
               <View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>{firstName.slice(0, 1).toUpperCase()}</Text></View>
               <Text style={styles.profileName}>{currentUser.fullName}</Text>
               <Text style={styles.profileEmail}>{currentUser.email}</Text>
+              <View style={styles.profileDivider} />
+              <View style={styles.profileAccountDetails}>
+                <Text style={styles.profileAccountHeading}>Datos de tu cuenta</Text>
+                <ProfileDetailRow label="Teléfono" value={`${currentUser.phone.dialCode} ${currentUser.phone.number}`} />
+                <ProfileDetailRow label="Miembro desde" value={new Date(currentUser.createdAt).toLocaleDateString('es-US', { year: 'numeric', month: 'long', day: 'numeric' })} />
+                <TouchableOpacity
+                  style={styles.profileEditButton}
+                  onPress={() => setShowAccountSettings(true)}
+                  accessibilityRole="button"
+                >
+                  <MaterialCommunityIcons name="account-edit-outline" size={18} color={colors.onPrimary} />
+                  <Text style={styles.profileEditButtonText}>Editar información y seguridad</Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.profileDivider} />
               <TouchableOpacity style={styles.profileOrdersButton} onPress={openOrderHistory} accessibilityRole="button">
                 <View style={styles.profileOrdersIcon}><MaterialCommunityIcons name="clipboard-list-outline" size={20} color={colors.primary} /></View>
@@ -420,11 +478,13 @@ export function HomeScreen() {
         onClose={() => setSelectedOrderId(null)}
         onSaveAddress={async (address: CheckoutInput) => {
           if (!selectedOrder) return;
+          const countryDialCode = COUNTRIES.find((country) => country.code === address.countryCode.trim().toUpperCase())?.dialCode
+            ?? currentUser.phone.dialCode;
           await updateOrder(selectedOrder.id, currentUser.id, {
             shippingAddress: {
               ...selectedOrder.shippingAddress,
               recipient: address.recipient.trim(),
-              phone: address.phone.trim(),
+              phone: `${countryDialCode} ${address.phone.trim()}`,
               line1: address.line1.trim(),
               city: address.city.trim(),
               region: address.region.trim() || undefined,
@@ -438,6 +498,22 @@ export function HomeScreen() {
           await cancelOrder(selectedOrder.id, currentUser.id);
         }}
       />
+      <AboutSkyNovaModal visible={showAbout} onClose={() => setShowAbout(false)} />
+      {showAccountSettings && (
+        <AccountSettingsModal
+          key={currentUser.id}
+          user={currentUser}
+          visible
+          onClose={() => setShowAccountSettings(false)}
+          onSave={async (input) => { await updateProfile(input); }}
+          onDeleteAccount={async (password) => {
+            await waitForPendingWrites();
+            await deleteAccount(password);
+            forgetAccountCart(currentUser.id);
+            forgetUserData(currentUser.id);
+          }}
+        />
+      )}
       {isLoggingOut && (
         <Modal visible transparent={false} animationType="none" statusBarTranslucent onRequestClose={() => {}}>
         <View style={logoutStyles.overlay}>
@@ -461,6 +537,15 @@ export function HomeScreen() {
       )}
 
     </SafeAreaView>
+  );
+}
+
+function ProfileDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.profileDetailRow}>
+      <Text style={styles.profileDetailLabel}>{label}</Text>
+      <Text style={styles.profileDetailValue} numberOfLines={1}>{value || 'No registrado'}</Text>
+    </View>
   );
 }
 
@@ -519,14 +604,16 @@ function OrderSection({
         <Text style={styles.orderSectionTitle}>{title}</Text>
         <Text style={styles.orderSectionCount}>{orders.length}</Text>
       </View>
-      {orders.map((order) => (
+      {orders.map((order) => {
+        const totalUnits = order.items.reduce((sum, item) => sum + item.quantity, 0);
+        return (
         <View key={order.id} style={styles.orderCard}>
           <View style={styles.orderCardHeader}>
             <Text style={styles.orderNumber}>Pedido #{order.id.slice(-8).toUpperCase()}</Text>
             <OrderStatusBadge status={order.status} />
           </View>
           <Text style={styles.orderDate}>
-            {new Date(order.createdAt).toLocaleDateString('es-CO')} · {order.items.length} {order.items.length === 1 ? 'artículo' : 'artículos'}
+            {new Date(order.createdAt).toLocaleDateString('es-CO')} · {totalUnits} {totalUnits === 1 ? 'artículo' : 'artículos'}
           </Text>
           <Text style={styles.orderItemNames} numberOfLines={2}>
             {order.items.map((item) => `${item.productName} ×${item.quantity}`).join(' · ')}
@@ -542,7 +629,8 @@ function OrderSection({
             <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
           </TouchableOpacity>
         </View>
-      ))}
+        );
+      })}
     </View>
   );
 }

@@ -25,7 +25,29 @@ Desde la carpeta del proyecto —donde está `package.json`— instala las depen
 npm install
 ```
 
-No hace falta instalar React Native CLI globalmente ni configurar una base de datos para probar el prototipo.
+No hace falta instalar React Native CLI globalmente. Sin configuración de Firebase, el prototipo conserva el modo de demostración y usa SQLite local.
+
+### Conectar Firebase
+
+1. Crea un proyecto y una aplicación web en Firebase; activa **Authentication → Email/Password** y crea Firestore.
+2. Crea/habilita el bucket de **Storage** en la consola. La consola puede exigir activar el plan Blaze y asociar facturación; revisa costos y condiciones antes de aceptarlo. El código no cambia tu plan.
+3. Copia `.env.skynova` como `.env` y completa la configuración de la aplicación web, incluido `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` con el nombre exacto del bucket. Estas variables `EXPO_PUBLIC_*` son configuración pública del cliente, no claves administrativas. Expo lee `.env`; nunca incluyas una cuenta de servicio en la app.
+4. Después de verificar las reglas, publícalas manualmente con `firebase deploy --only firestore:rules,storage` (usa `firebase.json`) o pégalas en Firebase Console. Este repositorio no las despliega automáticamente.
+5. Reinicia Expo después de cambiar `.env`. El registro, inicio/cierre de sesión y recuperación de contraseña usan Firebase Authentication; los pedidos se cachean en SQLite y se sincronizan en segundo plano con Firebase al recuperar conexión. Los IDs estables hacen que reintentar un envío no cree otro pedido.
+
+Los comprobantes son opcionales: se guardan primero en el dispositivo y se suben a `receipts/{uid}/{orderId}/` cuando hay conexión, bucket y sesión válidos. Se aceptan imágenes JPG, PNG, WebP o HEIC de hasta 5 MB; `storage.rules` limita acceso al propietario. No se pueden sincronizar hasta habilitar/configurar Storage y publicar las reglas.
+
+### Servicio REST de demostración
+
+Para probar el consumo REST del catálogo y la sincronización idempotente de pedidos, ejecuta en otra terminal:
+
+```bash
+npm run mock:api
+```
+
+Configura `EXPO_PUBLIC_SKYNOVA_API_URL` en `.env` con `http://localhost:8787` para web, `http://10.0.2.2:8787` para el emulador Android o `http://<IP-LAN-del-equipo>:8787` para un dispositivo físico; reinicia Expo después. El servidor expone `GET /catalog` y `PUT /orders/{id}`. Es solo un mock local de desarrollo, sin autenticación ni garantías de producción; no lo expongas a Internet ni lo uses con datos reales. Sin esa variable, la app usa el catálogo local/Firebase. La cola de pedidos continúa en SQLite aunque el servicio REST no esté disponible.
+
+El catálogo de demostración se siembra en SQLite para el primer uso y como respaldo offline. Si Firestore tiene productos cargados desde un entorno administrativo, la app descarga `categories`, `products`, `drone_specs`, `product_images` y reseñas, y actualiza la caché SQLite; no se permite editar el catálogo desde el cliente. Las reseñas usan `product_reviews/{productId}_{userId}`; el carrito usa `carts/{userId}`; direcciones y pedidos se guardan en `addresses/{addressId}` y `orders/{orderId}`. No guardes contraseñas en Firestore/SQLite ni incluyas una cuenta de servicio en la app.
 
 ## 5. Ejecución
 
@@ -55,19 +77,19 @@ Estos comandos requieren Android Studio/JDK o Xcode, según la plataforma. Este 
 5. Edita y guarda la dirección de entrega mientras el pedido esté pendiente o pagado para **actualizarlo**.
 6. **Cancela** el pedido desde su detalle: queda marcado como cancelado y sigue disponible en el historial (borrado lógico, no eliminación definitiva).
 
-Al confirmar el checkout se crea un pedido de demostración en estado `paid`; de esa forma, la funcionalidad se ve directamente, sin preocuparnos por detalles secundarios aún. El flujo permite crear, consultar, actualizar y cancelar pedidos, pero no simula su envío ni entrega.
+En el checkout de demostración se puede elegir Yape o Visa; la preferencia queda guardada en SQLite y Firestore y se muestra en el detalle. Al confirmar, el flujo marca el pedido como `paid` para demostrar el recorrido de compra. No hay integración con una pasarela ni se realiza un cobro real; nunca se solicitan credenciales ni datos de tarjeta. El flujo permite consultar, actualizar y cancelar pedidos.
 
 ## 7. Arquitectura: Clean Architecture
 
 El código separa las reglas del negocio de la interfaz y del almacenamiento:
 
 - `src/domain/`: entidades, contratos de repositorio y casos de uso; contiene las reglas centrales.
-- `src/infrastructure/`: repositorios en memoria, contextos de estado y composición de dependencias.
+- `src/infrastructure/`: repositorios SQLite, integración Firebase, contextos de estado y composición de dependencias.
 - `src/presentation/`: pantallas, componentes y formularios.
 - `src/app/`: rutas y navegación con Expo Router.
 - `src/shared/`: tema, validaciones y utilidades compartidas.
 
-La capa de dominio define contratos que la infraestructura implementa, lo que permite cambiar el almacenamiento sin acoplar las reglas de negocio a una base de datos. En esta versión, los datos se guardan solo en memoria y se pierden al cerrar la app; `database/schema.sql` es una referencia para una posible persistencia futura, no una base conectada.
+La capa de dominio define contratos que la infraestructura implementa. SQLite proporciona persistencia local del catálogo, carrito y pedidos; Firebase Authentication gestiona credenciales y Firestore sincroniza perfiles y datos de usuario cuando se configura el proyecto. `database/schema.sql` documenta el modelo relacional; SQLite lo adapta a tipos y restricciones compatibles con el dispositivo.
 
 ## 8. Integrantes del grupo
 

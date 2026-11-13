@@ -35,7 +35,7 @@ export function RegisterScreen() {
 
   const handleRegister = async () => {
     const registered = await submit();
-    if (registered) router.replace('/login' as never);
+    if (registered) router.replace('/home' as never);
   };
 
   return (
@@ -74,22 +74,12 @@ export function RegisterScreen() {
             <TextField
               label="Correo electrónico"
               icon="mail"
-              placeholder="usuario@dominio.extensión"
+              placeholder="nombre@dominio.extensión"
               value={values.email}
               onChangeText={(text) => setField('email', text)}
               error={errors.email}
               keyboardType="email-address"
               autoComplete="email"
-            />
-
-            <TextField
-              label="Usuario"
-              icon="at"
-              placeholder="Nombre de usuario"
-              value={values.username}
-              onChangeText={(text) => setField('username', text)}
-              error={errors.username}
-              autoComplete="username"
             />
 
             <PhoneField
@@ -190,4 +180,3 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 });
-

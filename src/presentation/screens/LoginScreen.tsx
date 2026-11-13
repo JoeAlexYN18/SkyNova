@@ -24,7 +24,6 @@ import { useLoginForm } from '@/presentation/hooks/useLoginForm';
 import { colors, radius, spacing, typography } from '@/shared/theme';
 import { MESSAGES } from '@/shared/constants/messages';
 import { useToast } from '@/infrastructure/context/ToastContext';
-import { DEMO_CREDENTIALS } from '@/infrastructure/data/demoCredentials';
 
 export function LoginScreen() {
   const { state, setIdentifier, setPassword, submit } = useLoginForm();
@@ -105,13 +104,13 @@ export function LoginScreen() {
 
             <View style={styles.card}>
               <TextField
-                label="Correo electrónico o usuario"
+                label="Correo electrónico"
                 icon="person"
-                placeholder={DEMO_CREDENTIALS.username}
+                placeholder="nombre@dominio.com"
                 value={state.identifier}
                 onChangeText={setIdentifier}
                 error={state.errors.identifier}
-                autoComplete="username"
+                autoComplete="email"
               />
 
               <PasswordField
@@ -219,7 +218,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   forgotLink: { ...typography.caption, color: colors.primary, fontWeight: '700' },
-  demoHint: { ...typography.footer, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
   registerPrompt: {
     ...typography.caption,
     color: colors.textSecondary,

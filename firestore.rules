@@ -1,0 +1,119 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'full_name', 'email', 'phone_country', 'phone_dial_code',
+          'phone_number', 'created_at', 'updated_at'
+        ]);
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /categories/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /products/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /drone_specs/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /product_images/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /product_reviews/{reviewId} {
+      allow read: if true;
+      allow create, update: if signedIn()
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.id == reviewId
+        && reviewId == request.resource.data.product_id + '_' + request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.keys().hasOnly([
+          'id', 'product_id', 'user_id', 'reviewer_name', 'rating', 'review_text', 'created_at'
+        ]);
+      allow delete: if signedIn() && resource.data.user_id == request.auth.uid;
+    }
+
+    match /carts/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.user_id == userId;
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /addresses/{addressId} {
+      allow read: if signedIn() && resource.data.user_id == request.auth.uid;
+      allow create, update: if signedIn()
+        && request.resource.data.user_id == request.auth.uid;
+      allow delete: if signedIn() && resource.data.user_id == request.auth.uid;
+    }
+
+    match /orders/{orderId} {
+      allow read: if signedIn() && resource.data.user_id == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.id == orderId
+        && request.resource.data.status in ['pending', 'paid', 'cancelled']
+        && request.resource.data.items is list
+        && (!('payment_method' in request.resource.data)
+          || request.resource.data.payment_method == null
+          || request.resource.data.payment_method in ['yape', 'visa'])
+        && (request.resource.data.payment_method != 'yape'
+          || request.resource.data.shipping_address.country_code == 'PE')
+        && (!('receipt_storage_path' in request.resource.data)
+          || request.resource.data.receipt_storage_path.matches(
+            'receipts/' + request.auth.uid + '/' + orderId + '/[^/]+'
+          ))
+        && request.resource.data.keys().hasOnly([
+          'id', 'user_id', 'shipping_address_id', 'shipping_address', 'status',
+          'payment_method', 'payment_details', 'currency', 'created_at', 'updated_at',
+          'items', 'receipt_storage_path'
+        ]);
+      allow update: if signedIn()
+        && resource.data.user_id == request.auth.uid
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.items == resource.data.items
+        && request.resource.data.currency == resource.data.currency
+        && resource.data.status in ['pending', 'paid', 'cancelled']
+        && request.resource.data.status in [resource.data.status, 'cancelled']
+        && (!('payment_method' in request.resource.data)
+          || request.resource.data.payment_method == null
+          || request.resource.data.payment_method in ['yape', 'visa'])
+        && (request.resource.data.payment_method != 'yape'
+          || request.resource.data.shipping_address.country_code == 'PE')
+        && (!('receipt_storage_path' in request.resource.data)
+          || request.resource.data.receipt_storage_path.matches(
+            'receipts/' + request.auth.uid + '/' + orderId + '/[^/]+'
+          ))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'shipping_address_id', 'shipping_address', 'status', 'updated_at',
+          'receipt_storage_path', 'payment_method', 'payment_details'
+        ])
+        && (resource.data.status != 'cancelled'
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'updated_at', 'receipt_storage_path', 'payment_method', 'payment_details'
+          ]));
+      allow delete: if signedIn() && resource.data.user_id == request.auth.uid;
+    }
+  }
+}

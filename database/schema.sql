@@ -3,7 +3,6 @@ CREATE TABLE users (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     full_name       varchar(100) NOT NULL CHECK (char_length(btrim(full_name)) BETWEEN 2 AND 100),
     email           varchar(254) NOT NULL,
-    username        varchar(20) NOT NULL CHECK (username ~ '^[A-Za-z0-9_-]{3,20}$'),
     password_hash   text NOT NULL,
     phone_country   char(2) NOT NULL CHECK (phone_country ~ '^[A-Z]{2}$'),
     phone_dial_code varchar(6) NOT NULL CHECK (phone_dial_code ~ '^\+[0-9]{1,4}$'),
@@ -13,7 +12,6 @@ CREATE TABLE users (
 );
 
 CREATE UNIQUE INDEX users_email_lower_uq ON users (lower(email));
-CREATE UNIQUE INDEX users_username_lower_uq ON users (lower(username));
 ALTER TABLE users ADD CONSTRAINT users_email_format_ck
     CHECK (email = btrim(email) AND email ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]{2,}$');
 
@@ -23,7 +21,6 @@ CREATE TABLE addresses (
     recipient    varchar(100) NOT NULL,
     phone        varchar(30) NOT NULL,
     line1        varchar(200) NOT NULL,
-    line2        varchar(200),
     city         varchar(100) NOT NULL,
     region       varchar(100),
     postal_code  varchar(20),
@@ -124,6 +121,8 @@ CREATE TABLE orders (
     shipping_address_id  uuid NOT NULL,
     status               varchar(16) NOT NULL DEFAULT 'pending'
                          CHECK (status IN ('pending', 'paid', 'shipped', 'delivered', 'cancelled')),
+    payment_method       varchar(8)
+                         CHECK (payment_method IS NULL OR payment_method IN ('yape', 'visa')),
     currency             char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
     created_at           timestamptz NOT NULL DEFAULT now(),
     updated_at           timestamptz NOT NULL DEFAULT now()
@@ -143,4 +142,3 @@ CREATE TABLE order_items (
     UNIQUE (order_id, sku)
 );
 CREATE INDEX order_items_product_id_idx ON order_items (product_id);
-

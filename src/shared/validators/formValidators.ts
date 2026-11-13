@@ -7,12 +7,12 @@ import {
   type CountryCode,
 } from 'libphonenumber-js';
 import { MESSAGES } from '../constants/messages';
+import type { CardBrand } from '@/domain/entities/Order';
 
 
 export const isRequired = (value: string): boolean => value.trim().length > 0;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const USERNAME_REGEX = /^[a-zA-Z0-9_-]{3,20}$/;
 
 export function validateFullName(value: string): string | undefined {
   if (!isRequired(value)) return MESSAGES.REQUIRED;
@@ -25,12 +25,6 @@ export function validateEmail(value: string): string | undefined {
   if (!isRequired(value)) return MESSAGES.REQUIRED;
   const email = value.trim();
   if (email.length > 254 || !EMAIL_REGEX.test(email)) return MESSAGES.INVALID_EMAIL;
-  return undefined;
-}
-
-export function validateUsername(value: string): string | undefined {
-  if (!isRequired(value)) return MESSAGES.REQUIRED;
-  if (!USERNAME_REGEX.test(value.trim())) return MESSAGES.INVALID_USERNAME;
   return undefined;
 }
 
@@ -82,4 +76,69 @@ export function getPasswordStrength(value: string): PasswordStrength {
   if (variety === 2) return { score: 2, colorKey: 'warning' };
   if (variety === 3) return { score: 3, colorKey: 'info' };
   return { score: 4, colorKey: 'success' };
+}
+
+export function validateCardholderName(value: string): string | undefined {
+  if (!isRequired(value)) return MESSAGES.REQUIRED;
+  const name = value.trim();
+  if (name.length < 2 || name.length > 100 || !/^[\p{L}][\p{L} .'’-]*$/u.test(name)) {
+    return MESSAGES.INVALID_CARDHOLDER_NAME;
+  }
+  return undefined;
+}
+
+export function cardDigits(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+export function isLuhnValid(digits: string): boolean {
+  if (!/^\d{13,19}$/.test(digits)) return false;
+  let sum = 0;
+  let doubleDigit = false;
+  for (let index = digits.length - 1; index >= 0; index -= 1) {
+    let digit = digits.charCodeAt(index) - 48;
+    if (doubleDigit) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    doubleDigit = !doubleDigit;
+  }
+  return sum % 10 === 0;
+}
+
+export function detectCardBrand(digits: string): CardBrand {
+  if (/^4/.test(digits)) return 'visa';
+  if (/^(5[1-5]|2[2-7])/.test(digits)) return 'mastercard';
+  if (/^3[47]/.test(digits)) return 'amex';
+  if (/^6(011|5)/.test(digits)) return 'discover';
+  return 'other';
+}
+
+export function validateCardNumber(value: string): string | undefined {
+  const digits = cardDigits(value);
+  if (!digits.length) return MESSAGES.REQUIRED;
+  return isLuhnValid(digits) ? undefined : MESSAGES.INVALID_CARD_NUMBER;
+}
+
+export function validateCardExpiry(value: string): string | undefined {
+  const digits = cardDigits(value);
+  if (!digits.length) return MESSAGES.REQUIRED;
+  const match = /^(\d{2})(\d{2})$/.exec(digits);
+  if (!match) return MESSAGES.INVALID_CARD_EXPIRY;
+  const month = Number(match[1]);
+  const year = 2000 + Number(match[2]);
+  if (month < 1 || month > 12) return MESSAGES.INVALID_CARD_EXPIRY;
+  const now = new Date();
+  if (year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1)) {
+    return MESSAGES.CARD_EXPIRED;
+  }
+  return undefined;
+}
+
+export function validateCardCvv(value: string, brand: CardBrand): string | undefined {
+  const digits = cardDigits(value);
+  if (!digits.length) return MESSAGES.REQUIRED;
+  const expectedLength = brand === 'amex' ? 4 : 3;
+  return digits.length === expectedLength ? undefined : MESSAGES.INVALID_CARD_CVV;
 }

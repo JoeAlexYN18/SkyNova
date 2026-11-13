@@ -1,4 +1,4 @@
-import type { Product, ProductBrand, ProductCategory, ProductType } from '../entities/Product';
+import type { Product, ProductBrand, ProductCategory, ProductReview, ProductType } from '../entities/Product';
 
 export type ProductSort = 'relevance' | 'price_asc' | 'price_desc' | 'best_selling' | 'best_rated' | 'newest';
 
@@ -33,9 +33,12 @@ export interface HomeProductCollections {
 
 
 export interface IProductRepository {
+  syncCatalog(): Promise<boolean>;
   listCategories(): Promise<ProductCategory[]>;
   listBrands(): Promise<ProductBrand[]>;
   listHomeCollections(): Promise<HomeProductCollections>;
   searchSuggestions(query: string, limit?: number): Promise<Product[]>;
   listProducts(query?: ProductQuery): Promise<ProductPage>;
+  listReviews(productId: string, onSyncError?: (error: unknown) => void): Promise<ProductReview[]>;
+  saveReview(input: Omit<ProductReview, 'id' | 'createdAt' | 'reviewerName'> & { reviewerName: string }): Promise<ProductReview>;
 }

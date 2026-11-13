@@ -8,11 +8,12 @@ import { PasswordField } from '@/presentation/components/PasswordField';
 import { PrimaryButton } from '@/presentation/components/PrimaryButton';
 import { TextField } from '@/presentation/components/TextField';
 import { MESSAGES } from '@/shared/constants/messages';
-import { validateEmail, validatePassword, validateUsername } from '@/shared/validators/formValidators';
+import { validateEmail, validatePassword } from '@/shared/validators/formValidators';
 import { colors, spacing, typography } from '@/shared/theme';
+import { firebaseConfigured } from '@/infrastructure/data/firebaseServices';
 
 export function ForgotPasswordScreen() {
-  const { resetPassword } = useAuth();
+  const { resetPassword, sendPasswordReset } = useAuth();
   const { show } = useToast();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -24,14 +25,12 @@ export function ForgotPasswordScreen() {
     const nextErrors: Record<string, string> = {};
     const normalizedIdentifier = identifier.trim();
     if (!normalizedIdentifier) nextErrors.identifier = MESSAGES.LOGIN_IDENTIFIER_REQUIRED;
-    else nextErrors.identifier = normalizedIdentifier.includes('@')
-      ? validateEmail(normalizedIdentifier) ?? ''
-      : validateUsername(normalizedIdentifier) ?? '';
+    else nextErrors.identifier = validateEmail(normalizedIdentifier) ?? '';
     if (!nextErrors.identifier) delete nextErrors.identifier;
-    const passwordError = validatePassword(password);
+    const passwordError = firebaseConfigured ? '' : validatePassword(password);
     if (passwordError) nextErrors.password = passwordError;
-    if (!confirmPassword) nextErrors.confirmPassword = MESSAGES.REQUIRED;
-    else if (password !== confirmPassword) nextErrors.confirmPassword = MESSAGES.PASSWORD_MISMATCH;
+    if (!firebaseConfigured && !confirmPassword) nextErrors.confirmPassword = MESSAGES.REQUIRED;
+    else if (!firebaseConfigured && password !== confirmPassword) nextErrors.confirmPassword = MESSAGES.PASSWORD_MISMATCH;
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
@@ -40,9 +39,15 @@ export function ForgotPasswordScreen() {
     setErrors({});
     setIsSubmitting(true);
     try {
+      if (firebaseConfigured) {
+        await sendPasswordReset(normalizedIdentifier);
+        show('Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.', 'success');
+        router.replace('/login' as never);
+        return;
+      }
       const updated = await resetPassword(normalizedIdentifier, password);
       if (!updated) {
-        setErrors({ identifier: 'No encontramos una cuenta con ese correo o usuario.' });
+        setErrors({ identifier: 'No encontramos una cuenta con ese correo electrónico.' });
         return;
       }
       show('Tu contraseña se actualizó. Ya puedes iniciar sesión.', 'success');
@@ -71,20 +76,22 @@ export function ForgotPasswordScreen() {
         >
           <View style={styles.card}>
             <Text style={styles.eyebrow}>RECUPERAR ACCESO</Text>
-            <Text style={styles.title}>Crea una nueva contraseña</Text>
-            <Text style={styles.description}>Ingresa el correo o usuario de tu cuenta y elige una contraseña nueva.</Text>
+            <Text style={styles.title}>{firebaseConfigured ? 'Recupera tu acceso' : 'Crea una nueva contraseña'}</Text>
+            <Text style={styles.description}>{firebaseConfigured
+              ? 'Te enviaremos un enlace seguro para crear una contraseña nueva.'
+              : 'Ingresa el correo electrónico de tu cuenta y elige una contraseña nueva.'}</Text>
 
             <TextField
-              label="Correo electrónico o usuario"
+              label="Correo electrónico"
               icon="person"
-              placeholder="Correo o nombre de usuario"
+              placeholder="nombre@dominio.com"
               value={identifier}
               onChangeText={(value) => { setIdentifier(value); setErrors((current) => ({ ...current, identifier: '' })); }}
               error={errors.identifier}
               autoCapitalize="none"
-              autoComplete="username"
+              autoComplete="email"
             />
-            <PasswordField
+            {!firebaseConfigured && <PasswordField
               label="Nueva contraseña"
               placeholder="Crea una contraseña segura"
               value={password}
@@ -92,16 +99,16 @@ export function ForgotPasswordScreen() {
               error={errors.password}
               autoComplete="new-password"
               showStrength
-            />
-            <PasswordField
+            />}
+            {!firebaseConfigured && <PasswordField
               label="Confirmar contraseña"
               placeholder="Repite tu contraseña"
               value={confirmPassword}
               onChangeText={(value) => { setConfirmPassword(value); setErrors((current) => ({ ...current, confirmPassword: '' })); }}
               error={errors.confirmPassword}
               autoComplete="new-password"
-            />
-            <PrimaryButton title="Confirmar cambios" icon="checkmark" loading={isSubmitting} onPress={submit} />
+            />}
+            <PrimaryButton title={firebaseConfigured ? 'Enviar enlace' : 'Confirmar cambios'} icon="checkmark" loading={isSubmitting} onPress={submit} />
             <Link href="/login" style={styles.backLink}>Volver a iniciar sesión</Link>
           </View>
         </ScrollView>

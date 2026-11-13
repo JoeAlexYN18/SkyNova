@@ -1,6 +1,15 @@
 import type { IProductRepository, ProductQuery } from '@/domain/repositories/IProductRepository';
-import type { Product, ProductCategory } from '@/domain/entities/Product';
+import type { Product, ProductCategory, ProductImage, ProductReview } from '@/domain/entities/Product';
 import { mergeCatalogBrands } from '@/shared/data/brands';
+import { getDatabase, withDatabaseTransaction } from '@/infrastructure/data/sqliteDatabase';
+import { generateId } from '@/shared/utils/generateId';
+import {
+  getAllProductReviewsFromFirebase,
+  getCatalogFromFirebase,
+  getProductReviewsFromFirebase,
+  syncReviewToFirebase,
+} from '@/infrastructure/data/firebaseDataSync';
+import { getCatalogFromRest, restApiConfigured } from '@/infrastructure/data/restApiClient';
 
 const categories: ProductCategory[] = [
   { id: 'cat-drones-4k', name: 'Drones 4K', icon: 'video-outline', productType: 'drone' },
@@ -274,24 +283,33 @@ const products: Product[] = [
   },
 ];
 
-const categoriesById = new Map(categories.map((category) => [category.id, category]));
-const searchableProducts = products.map((product) => ({
-  product,
-  name: normalizeSearchText(product.name),
-  brand: normalizeSearchText(product.brand),
-  sku: normalizeSearchText(product.sku),
-  text: buildSearchText(product),
-}));
+const categoryIcons: Record<string, string> = Object.fromEntries(categories.map(({ id, icon }) => [id, icon]));
+let catalogSeedPromise: Promise<void> | undefined;
+let catalogSyncPromise: Promise<boolean> | undefined;
 
-export class InMemoryProductRepository implements IProductRepository {
-  async listCategories() { return categories.map((category) => ({ ...category })); }
+export class SqliteProductRepository implements IProductRepository {
+  async syncCatalog() {
+    if (!catalogSyncPromise) {
+      catalogSyncPromise = this.importRemoteCatalog().catch((error: unknown) => {
+        catalogSyncPromise = undefined;
+        throw error;
+      });
+    }
+    return catalogSyncPromise;
+  }
+
+  async listCategories() {
+    return (await this.loadCatalog()).categories;
+  }
 
   async listBrands() {
-    return mergeCatalogBrands(products.filter((product) => product.isActive).map((product) => product.brand));
+    const { products: catalogProducts } = await this.loadCatalog();
+    return mergeCatalogBrands(catalogProducts.filter((product) => product.isActive).map((product) => product.brand));
   }
 
   async listHomeCollections() {
-    const activeProducts = products.filter((product) => product.isActive);
+    const { products: catalogProducts } = await this.loadCatalog();
+    const activeProducts = catalogProducts.filter((product) => product.isActive);
     return {
       featuredDrones: activeProducts.filter((product) => product.productType === 'drone' && product.isHomeVisible !== false && !product.compareAtPrice).map(cloneProduct),
       bestSellingAccessories: activeProducts.filter((product) => product.productType !== 'drone' && product.isHomeVisible !== false && !product.compareAtPrice).map(cloneProduct),
@@ -299,10 +317,18 @@ export class InMemoryProductRepository implements IProductRepository {
   }
 
   async searchSuggestions(query: string, limit = 5) {
+    const { products: catalogProducts, categories: catalogCategories } = await this.loadCatalog();
     const normalizedQuery = normalizeSearchText(query);
     const terms = getSearchTerms(normalizedQuery);
     if (terms.length === 0) return [];
 
+    const searchableProducts = catalogProducts.map((product) => ({
+      product,
+      name: normalizeSearchText(product.name),
+      brand: normalizeSearchText(product.brand),
+      sku: normalizeSearchText(product.sku),
+      text: buildSearchText(product, new Map(catalogCategories.map((category) => [category.id, category]))),
+    }));
     return searchableProducts
       .filter(({ product, text }) => product.isActive && terms.every((term) => text.includes(term)))
       .sort((left, right) => scoreSearchMatch(right, normalizedQuery) - scoreSearchMatch(left, normalizedQuery))
@@ -311,6 +337,15 @@ export class InMemoryProductRepository implements IProductRepository {
   }
 
   async listProducts(query: ProductQuery = {}) {
+    const { products: catalogProducts, categories: catalogCategories } = await this.loadCatalog();
+    const categoriesById = new Map(catalogCategories.map((category) => [category.id, category]));
+    const searchableProducts = catalogProducts.map((product) => ({
+      product,
+      name: normalizeSearchText(product.name),
+      brand: normalizeSearchText(product.brand),
+      sku: normalizeSearchText(product.sku),
+      text: buildSearchText(product, categoriesById),
+    }));
     const searchTerms = getSearchTerms(query.search ?? '');
     const brand = query.brand?.trim().toLocaleLowerCase();
     const matches = searchableProducts.filter(({ product, text }) => {
@@ -344,9 +379,498 @@ export class InMemoryProductRepository implements IProductRepository {
       pageSize,
     };
   }
+
+  async listReviews(productId: string, onSyncError?: (error: unknown) => void): Promise<ProductReview[]> {
+    const database = await getDatabase();
+    let cloudReviews: ProductReview[] = [];
+    try {
+      cloudReviews = await getProductReviewsFromFirebase(productId);
+    } catch (error) {
+      onSyncError?.(error);
+    }
+    for (const review of cloudReviews) {
+      await database.runAsync(
+        `INSERT INTO users (id, full_name, email, phone_country, phone_dial_code, phone_number)
+         VALUES (?, ?, ?, 'ZZ', '+0', '0000')
+         ON CONFLICT(id) DO UPDATE SET full_name = excluded.full_name, updated_at = ?`,
+        review.userId,
+        review.reviewerName,
+        `${review.userId}@local.skynova.invalid`,
+        review.createdAt,
+      );
+      await database.runAsync(
+        `INSERT INTO product_reviews (id, product_id, user_id, rating, review_text, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(product_id, user_id) DO UPDATE SET
+           rating = excluded.rating, review_text = excluded.review_text, created_at = excluded.created_at`,
+        review.id,
+        review.productId,
+        review.userId,
+        review.rating,
+        review.reviewText ?? null,
+        review.createdAt,
+      );
+    }
+    const rows = await database.getAllAsync<ReviewRow>(
+      `SELECT r.id, r.product_id, r.user_id, u.full_name, r.rating, r.review_text, r.created_at
+       FROM product_reviews r JOIN users u ON u.id = r.user_id
+       WHERE r.product_id = ? ORDER BY r.created_at DESC`,
+      productId,
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      productId: row.product_id,
+      userId: row.user_id,
+      reviewerName: row.full_name,
+      rating: row.rating,
+      reviewText: row.review_text ?? undefined,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async saveReview(input: Omit<ProductReview, 'id' | 'createdAt' | 'reviewerName'> & { reviewerName: string }): Promise<ProductReview> {
+    const database = await getDatabase();
+    const now = new Date().toISOString();
+    const reviewId = generateId('rev');
+    await database.runAsync(
+      `INSERT INTO users (id, full_name, email, phone_country, phone_dial_code, phone_number)
+       VALUES (?, ?, ?, 'ZZ', '+0', '0000')
+       ON CONFLICT(id) DO UPDATE SET full_name = excluded.full_name, updated_at = ?`,
+      input.userId,
+      input.reviewerName,
+      `${input.userId}@local.skynova.invalid`,
+      now,
+    );
+    await database.runAsync(
+      `INSERT INTO product_reviews (id, product_id, user_id, rating, review_text, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(product_id, user_id) DO UPDATE SET
+         rating = excluded.rating, review_text = excluded.review_text, created_at = excluded.created_at`,
+      reviewId,
+      input.productId,
+      input.userId,
+      input.rating,
+      input.reviewText?.trim() || null,
+      now,
+    );
+    await syncReviewToFirebase({
+      ...input,
+      id: reviewId,
+      createdAt: now,
+      reviewerName: input.reviewerName,
+      reviewText: input.reviewText?.trim() || undefined,
+    });
+    const rows = await this.listReviews(input.productId);
+    const saved = rows.find((review) => review.userId === input.userId);
+    if (!saved) throw new Error('No se pudo recuperar la calificación guardada.');
+    return saved;
+  }
+
+  private async loadCatalog() {
+    await this.ensureCatalogSeeded();
+    const database = await getDatabase();
+    const categoryRows = await database.getAllAsync<CategoryRow>('SELECT * FROM categories ORDER BY name');
+    const categories = categoryRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      productType: row.product_type,
+      icon: categoryIcons[row.id] ?? categoryIconFor(row.product_type),
+    } satisfies ProductCategory));
+    const rows = await database.getAllAsync<ProductRow>(
+      `SELECT p.*, d.max_flight_minutes,
+        (SELECT AVG(rating) FROM product_reviews WHERE product_id = p.id) AS rating_average,
+        (SELECT COUNT(*) FROM product_reviews WHERE product_id = p.id) AS rating_count,
+        (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi
+          JOIN orders o ON o.id = oi.order_id WHERE oi.product_id = p.id AND o.status != 'cancelled') AS sales_count
+       FROM products p LEFT JOIN drone_specs d ON d.product_id = p.id`,
+    );
+    const imageRows = await database.getAllAsync<ImageRow>(
+      'SELECT * FROM product_images ORDER BY product_id, display_order',
+    );
+    const imagesByProduct = new Map<string, ProductImage[]>();
+    for (const row of imageRows) {
+      const images = imagesByProduct.get(row.product_id) ?? [];
+      images.push({
+        id: row.id,
+        url: row.image_url,
+        altText: row.alt_text,
+        displayOrder: row.display_order,
+        isPrimary: row.is_primary === 1,
+      });
+      imagesByProduct.set(row.product_id, images);
+    }
+    const catalogProducts = rows.map((row) => {
+      const images = imagesByProduct.get(row.id) ?? [];
+      const primary = images.find((image) => image.isPrimary) ?? images[0];
+      return {
+        id: row.id,
+        categoryId: row.category_id,
+        sku: row.sku,
+        name: row.name,
+        description: row.description ?? '',
+        productType: row.product_type,
+        brand: row.brand ?? '',
+        price: row.price,
+        compareAtPrice: row.compare_at_price ?? undefined,
+        currency: row.currency,
+        stockQuantity: row.stock_quantity,
+        isActive: row.is_active === 1,
+        isFeatured: row.is_featured === 1,
+        isHomeVisible: row.is_home_visible === 1,
+        maxFlightMinutes: row.max_flight_minutes ?? undefined,
+        ratingAverage: row.rating_average ? Number(row.rating_average) : undefined,
+        ratingCount: row.rating_count ? Number(row.rating_count) : undefined,
+        salesCount: Number(row.sales_count) || 0,
+        createdAt: row.created_at,
+        imageUrl: primary?.url,
+        imageAlt: primary?.altText,
+        images,
+      } satisfies Product;
+    });
+    return { categories, products: catalogProducts };
+  }
+
+  private async importRemoteCatalog() {
+    const remote = restApiConfigured
+      ? await getCatalogFromRest()
+      : await getCatalogFromFirebase();
+    if (!remote || remote.products.length === 0) return false;
+    const now = new Date().toISOString();
+    const remoteCategories = remote.categories.map((row) => ({
+      id: row.id,
+      name: requiredRemoteString(row, 'name'),
+      productType: requiredProductType(row.product_type),
+    }));
+    const categoryIds = new Set(remoteCategories.map((category) => category.id));
+    const remoteProducts = remote.products.map((row) => {
+      const categoryId = requiredRemoteString(row, 'category_id');
+      const productType = requiredProductType(row.product_type);
+      if (!categoryIds.has(categoryId)) {
+        throw new Error(`El producto ${row.id} referencia una categoría que no existe en Firebase.`);
+      }
+      if (requiredRemoteString(row, 'currency').length !== 3) {
+        throw new Error(`El producto ${row.id} tiene una moneda inválida.`);
+      }
+      const price = requiredRemoteNumber(row, 'price');
+      const compareAtPrice = optionalRemoteNumber(row, 'compare_at_price');
+      const stockQuantity = requiredRemoteNumber(row, 'stock_quantity');
+      if (
+        price < 0
+        || (compareAtPrice !== undefined && compareAtPrice <= price)
+        || !Number.isSafeInteger(stockQuantity)
+        || stockQuantity < 0
+      ) {
+        throw new Error(`El producto ${row.id} tiene precio o inventario inválido.`);
+      }
+      return {
+        id: row.id,
+        categoryId,
+        sku: requiredRemoteString(row, 'sku'),
+        name: requiredRemoteString(row, 'name'),
+        description: optionalRemoteString(row, 'description') ?? null,
+        productType,
+        brand: optionalRemoteString(row, 'brand') ?? null,
+        price,
+        compareAtPrice: compareAtPrice ?? null,
+        currency: requiredRemoteString(row, 'currency').toUpperCase(),
+        stockQuantity,
+        isActive: optionalRemoteBoolean(row, 'is_active', true),
+        isFeatured: optionalRemoteBoolean(row, 'is_featured', false),
+        isHomeVisible: optionalRemoteBoolean(row, 'is_home_visible', true),
+        createdAt: optionalRemoteString(row, 'created_at') ?? now,
+        updatedAt: optionalRemoteString(row, 'updated_at') ?? now,
+      };
+    });
+    const remoteProductIds = new Set(remoteProducts.map((product) => product.id));
+    const remoteSpecs = remote.specs.map((row) => {
+      const productId = optionalRemoteString(row, 'product_id') ?? row.id;
+      const maxFlightMinutes = requiredRemoteNumber(row, 'max_flight_minutes');
+      if (!remoteProductIds.has(productId) || !Number.isSafeInteger(maxFlightMinutes) || maxFlightMinutes <= 0) {
+        throw new Error(`La ficha técnica ${row.id} es inválida en Firebase.`);
+      }
+      return { productId, maxFlightMinutes };
+    });
+    const remoteImages = remote.images.map((row) => {
+      const productId = requiredRemoteString(row, 'product_id');
+      const displayOrder = optionalRemoteNumber(row, 'display_order') ?? 0;
+      if (!remoteProductIds.has(productId) || !Number.isSafeInteger(displayOrder) || displayOrder < 0) {
+        throw new Error(`La imagen ${row.id} es inválida en Firebase.`);
+      }
+      return {
+        id: row.id,
+        productId,
+        imageUrl: requiredRemoteString(row, 'image_url'),
+        altText: requiredRemoteString(row, 'alt_text'),
+        displayOrder,
+        isPrimary: optionalRemoteBoolean(row, 'is_primary', false),
+        createdAt: optionalRemoteString(row, 'created_at') ?? now,
+      };
+    });
+    const remoteReviews = await getAllProductReviewsFromFirebase();
+    const database = await getDatabase();
+    await withDatabaseTransaction(database, async () => {
+      for (const category of remoteCategories) {
+        await database.runAsync(
+          `INSERT INTO categories (id, name, product_type) VALUES (?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET name = excluded.name, product_type = excluded.product_type`,
+          category.id,
+          category.name,
+          category.productType,
+        );
+      }
+      const localProducts = await database.getAllAsync<{ id: string }>('SELECT id FROM products');
+      for (const localProduct of localProducts) {
+        if (!remoteProductIds.has(localProduct.id)) {
+          await database.runAsync(
+            'UPDATE products SET is_active = 0, is_home_visible = 0 WHERE id = ?',
+            localProduct.id,
+          );
+        }
+      }
+      for (const product of remoteProducts) {
+        await database.runAsync(
+          `INSERT INTO products
+            (id, category_id, sku, name, description, product_type, brand, price, compare_at_price,
+             currency, stock_quantity, stock_base_quantity, is_active, is_featured, is_home_visible, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET category_id = excluded.category_id, sku = excluded.sku,
+             name = excluded.name, description = excluded.description, product_type = excluded.product_type,
+             brand = excluded.brand, price = excluded.price, compare_at_price = excluded.compare_at_price,
+             currency = excluded.currency,
+             stock_quantity = MAX(0, excluded.stock_quantity - MAX(0, COALESCE(stock_base_quantity, products.stock_quantity) - products.stock_quantity)),
+             stock_base_quantity = excluded.stock_quantity,
+             is_active = excluded.is_active, is_featured = excluded.is_featured,
+             is_home_visible = excluded.is_home_visible, updated_at = excluded.updated_at`,
+          product.id,
+          product.categoryId,
+          product.sku,
+          product.name,
+          product.description,
+          product.productType,
+          product.brand,
+          product.price,
+          product.compareAtPrice,
+          product.currency,
+          product.stockQuantity,
+          product.stockQuantity,
+          product.isActive ? 1 : 0,
+          product.isFeatured ? 1 : 0,
+          product.isHomeVisible ? 1 : 0,
+          product.createdAt,
+          product.updatedAt,
+        );
+        await database.runAsync('DELETE FROM drone_specs WHERE product_id = ?', product.id);
+        await database.runAsync('DELETE FROM product_images WHERE product_id = ?', product.id);
+      }
+      for (const spec of remoteSpecs) {
+        await database.runAsync(
+          'INSERT INTO drone_specs (product_id, max_flight_minutes) VALUES (?, ?)',
+          spec.productId,
+          spec.maxFlightMinutes,
+        );
+      }
+      for (const image of remoteImages) {
+        await database.runAsync(
+          `INSERT INTO product_images (id, product_id, image_url, alt_text, display_order, is_primary, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          image.id,
+          image.productId,
+          image.imageUrl,
+          image.altText,
+          image.displayOrder,
+          image.isPrimary ? 1 : 0,
+          image.createdAt,
+        );
+      }
+      for (const review of remoteReviews) {
+        if (!remoteProductIds.has(review.productId)) continue;
+        await database.runAsync(
+          `INSERT INTO users (id, full_name, email, phone_country, phone_dial_code, phone_number)
+           VALUES (?, ?, ?, 'ZZ', '+0', '0000')
+           ON CONFLICT(id) DO UPDATE SET full_name = excluded.full_name, updated_at = ?`,
+          review.userId,
+          review.reviewerName,
+          `${review.userId}@local.skynova.invalid`,
+          now,
+        );
+        await database.runAsync(
+          `INSERT INTO product_reviews (id, product_id, user_id, rating, review_text, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(product_id, user_id) DO UPDATE SET
+             rating = excluded.rating, review_text = excluded.review_text, created_at = excluded.created_at`,
+          review.id,
+          review.productId,
+          review.userId,
+          review.rating,
+          review.reviewText ?? null,
+          review.createdAt,
+        );
+      }
+    });
+    return true;
+  }
+
+  private async ensureCatalogSeeded() {
+    if (!catalogSeedPromise) {
+      catalogSeedPromise = (async () => {
+        const database = await getDatabase();
+        const result = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM products');
+        if ((result?.count ?? 0) > 0) return;
+        const now = new Date().toISOString();
+        await withDatabaseTransaction(database, async () => {
+          for (const category of categories) {
+            await database.runAsync(
+              'INSERT OR IGNORE INTO categories (id, name, product_type) VALUES (?, ?, ?)',
+              category.id,
+              category.name,
+              category.productType,
+            );
+          }
+          for (const product of products) {
+            await database.runAsync(
+              `INSERT OR IGNORE INTO products (
+                id, category_id, sku, name, description, product_type, brand, price,
+                compare_at_price, currency, stock_quantity, is_active, is_featured,
+                is_home_visible, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              product.id,
+              product.categoryId,
+              product.sku,
+              product.name,
+              product.description,
+              product.productType,
+              product.brand || null,
+              product.price,
+              product.compareAtPrice ?? null,
+              product.currency,
+              product.stockQuantity,
+              product.isActive ? 1 : 0,
+              product.isFeatured ? 1 : 0,
+              product.isHomeVisible === false ? 0 : 1,
+              product.createdAt ?? now,
+              now,
+            );
+            if (product.productType === 'drone' && product.maxFlightMinutes) {
+              await database.runAsync(
+                'INSERT OR IGNORE INTO drone_specs (product_id, max_flight_minutes) VALUES (?, ?)',
+                product.id,
+                product.maxFlightMinutes,
+              );
+            }
+            if (product.imageUrl) {
+              await database.runAsync(
+                `INSERT OR IGNORE INTO product_images
+                  (id, product_id, image_url, alt_text, display_order, is_primary)
+                 VALUES (?, ?, ?, ?, 0, 1)`,
+                `${product.id}-image-0`,
+                product.id,
+                product.imageUrl,
+                product.imageAlt ?? product.name,
+              );
+            }
+          }
+        });
+      })().catch((error: unknown) => {
+        catalogSeedPromise = undefined;
+        throw error;
+      });
+    }
+    await catalogSeedPromise;
+  }
 }
 
-function buildSearchText(product: Product) {
+type CategoryRow = { id: string; name: string; product_type: Product['productType'] };
+type ProductRow = {
+  id: string;
+  category_id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  product_type: Product['productType'];
+  brand: string | null;
+  price: number;
+  compare_at_price: number | null;
+  currency: string;
+  stock_quantity: number;
+  is_active: number;
+  is_featured: number;
+  is_home_visible: number;
+  created_at: string;
+  max_flight_minutes: number | null;
+  rating_average: number | null;
+  rating_count: number;
+  sales_count: number;
+};
+type ImageRow = {
+  id: string;
+  product_id: string;
+  image_url: string;
+  alt_text: string;
+  display_order: number;
+  is_primary: number;
+};
+type ReviewRow = {
+  id: string;
+  product_id: string;
+  user_id: string;
+  full_name: string;
+  rating: number;
+  review_text: string | null;
+  created_at: string;
+};
+
+function categoryIconFor(type: Product['productType']) {
+  if (type === 'drone') return 'quadcopter';
+  return type === 'accessory' ? 'toolbox-outline' : 'cog-outline';
+}
+
+function requiredRemoteString(row: Record<string, unknown>, key: string) {
+  const value = row[key];
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`El catálogo de Firebase no contiene un ${key} válido.`);
+  }
+  return value;
+}
+
+function optionalRemoteString(row: Record<string, unknown>, key: string) {
+  const value = row[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string') throw new Error(`El campo ${key} del catálogo de Firebase debe ser texto.`);
+  return value;
+}
+
+function requiredRemoteNumber(row: Record<string, unknown>, key: string) {
+  const value = row[key];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`El campo ${key} del catálogo de Firebase debe ser numérico.`);
+  }
+  return value;
+}
+
+function optionalRemoteNumber(row: Record<string, unknown>, key: string) {
+  const value = row[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`El campo ${key} del catálogo de Firebase debe ser numérico.`);
+  }
+  return value;
+}
+
+function optionalRemoteBoolean(row: Record<string, unknown>, key: string, fallback: boolean) {
+  const value = row[key];
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== 'boolean') throw new Error(`El campo ${key} del catálogo de Firebase debe ser booleano.`);
+  return value;
+}
+
+function requiredProductType(value: unknown): Product['productType'] {
+  if (value !== 'drone' && value !== 'accessory' && value !== 'spare_part') {
+    throw new Error('El catálogo de Firebase contiene un tipo de producto inválido.');
+  }
+  return value;
+}
+
+function buildSearchText(product: Product, categoriesById: Map<string, ProductCategory>) {
   const category = categoriesById.get(product.categoryId);
   const typeLabels: Record<Product['productType'], string> = {
     drone: 'dron drone drones aeronave',

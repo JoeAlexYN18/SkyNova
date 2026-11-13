@@ -1,20 +1,27 @@
 // Improvement 4
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { CheckoutInput, CheckoutLine, Order } from '@/domain/entities/Order';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import * as Network from 'expo-network';
+import type { CheckoutInput, CheckoutLine, Order, OrderPaymentDetails, PaymentMethod, ShippingAddressSnapshot } from '@/domain/entities/Order';
 import type { OrderUpdate } from '@/domain/repositories/IOrderRepository';
 import type { User } from '@/domain/entities/User';
 import { orderRepository } from '@/infrastructure/container';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { generateId } from '@/shared/utils/generateId';
+import { useAuth } from '@/infrastructure/context/AuthContext';
+import { orderSyncConfigured, syncOrderToServices } from '@/infrastructure/data/orderSyncService';
 
 interface OrderContextValue {
   orders: Order[];
   unreadOrderCount: (userId: string) => number;
   markOrdersRead: (userId: string) => void;
-  checkoutOrder: (user: User, lines: CheckoutLine[], address: CheckoutInput) => Promise<Order>;
+  forgetUserData: (userId: string) => void;
+  getDefaultAddress: (userId: string) => Promise<ShippingAddressSnapshot | null>;
+  checkoutOrder: (user: User, lines: CheckoutLine[], address: CheckoutInput, paymentMethod: PaymentMethod, paymentDetails: OrderPaymentDetails) => Promise<Order>;
   updateOrder: (orderId: string, userId: string, changes: OrderUpdate) => Promise<Order>;
   cancelOrder: (orderId: string, userId: string) => Promise<Order>;
+  attachReceipt: (orderId: string, userId: string, localUri: string) => Promise<Order>;
+  retryOrderSync: (userId: string) => Promise<boolean>;
 }
 
 const OrderContext = createContext<OrderContextValue | undefined>(undefined);
@@ -22,24 +29,128 @@ const OrderContext = createContext<OrderContextValue | undefined>(undefined);
 export function OrderProvider({ children }: { children: React.ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [unreadOrderIds, setUnreadOrderIds] = useState<Record<string, string[]>>({});
+  const syncingUsers = useRef(new Set<string>());
+  const syncRequestedUsers = useRef(new Set<string>());
+  const retryOrderSyncRef = useRef<(userId: string) => Promise<boolean>>(async () => false);
   const { show } = useToast();
-
+  const { currentUser } = useAuth();
+  const previousProfileRef = useRef<{
+    userId: string;
+    fullName: string;
+    phone: string;
+    countryCode: string;
+  } | null>(null);
   useEffect(() => {
-    let active = true;
-    orderRepository.list().then((storedOrders) => {
-      if (active) setOrders(storedOrders);
-    }).catch(() => {
-      if (active) show('No se pudieron cargar los pedidos.', 'error');
-    });
-    return () => { active = false; };
-  }, [show]);
+    const snapshot = currentUser ? {
+      userId: currentUser.id,
+      fullName: currentUser.fullName,
+      phone: `${currentUser.phone.dialCode} ${currentUser.phone.number}`,
+      countryCode: currentUser.phone.countryCode,
+    } : null;
+    const previous = previousProfileRef.current;
+    previousProfileRef.current = snapshot;
+    if (!currentUser || !snapshot || !previous || previous.userId !== snapshot.userId) return;
+    if (previous.fullName === snapshot.fullName
+      && previous.phone === snapshot.phone
+      && previous.countryCode === snapshot.countryCode) return;
+    void orderRepository.syncDefaultAddressContact(
+      currentUser.id,
+      { recipient: previous.fullName, phone: previous.phone, countryCode: previous.countryCode },
+      { recipient: snapshot.fullName, phone: snapshot.phone, countryCode: snapshot.countryCode },
+    ).catch(() => {});
+  }, [currentUser]);
+
+  const visibleOrders = useMemo(
+    () => currentUser ? orders.filter((order) => order.userId === currentUser.id) : [],
+    [currentUser, orders],
+  );
 
   const unreadOrderCount = useCallback((userId: string) => unreadOrderIds[userId]?.length ?? 0, [unreadOrderIds]);
+  const forgetUserData = useCallback((userId: string) => {
+    setOrders((current) => current.filter((order) => order.userId !== userId));
+    setUnreadOrderIds((current) => {
+      const remaining = { ...current };
+      delete remaining[userId];
+      return remaining;
+    });
+  }, []);
   const markOrdersRead = useCallback((userId: string) => {
     setUnreadOrderIds((current) => ({ ...current, [userId]: [] }));
   }, []);
+  const getDefaultAddress = useCallback((userId: string) => orderRepository.getDefaultAddress(userId, (error) => {
+    show(error instanceof Error ? `Se usará la dirección local: ${error.message}` : 'No se pudo sincronizar la dirección con Firebase.');
+  }), [show]);
 
-  const checkoutOrder = useCallback(async (user: User, lines: CheckoutLine[], input: CheckoutInput) => {
+  const retryOrderSync = useCallback(async (userId: string) => {
+    if (!orderSyncConfigured) return false;
+    if (syncingUsers.current.has(userId)) {
+      syncRequestedUsers.current.add(userId);
+      return false;
+    }
+    syncingUsers.current.add(userId);
+    try {
+      const state = await Network.getNetworkStateAsync();
+      if (!state.isConnected || state.isInternetReachable === false) return false;
+      const storedOrders = await orderRepository.list(userId);
+      for (const order of storedOrders) {
+        if (order.syncStatus === 'synced') continue;
+        try {
+          await syncOrderToServices(order);
+          await orderRepository.markOrderSynced(order.id, userId, order.updatedAt);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'No se pudo sincronizar el pedido.';
+          await orderRepository.markOrderSyncError(order.id, userId, message);
+          show(`Pedido #${order.id.slice(-8).toUpperCase()} guardado localmente: ${message}`, 'error');
+        }
+      }
+      const refreshedOrders = await orderRepository.list(userId);
+      setOrders((current) => [
+        ...current.filter((order) => order.userId !== userId),
+        ...refreshedOrders,
+      ]);
+      return refreshedOrders.every((order) => order.syncStatus === 'synced');
+    } catch (error) {
+      show(error instanceof Error ? error.message : 'No se pudo revisar la cola de pedidos.', 'error');
+      return false;
+    } finally {
+      syncingUsers.current.delete(userId);
+      if (syncRequestedUsers.current.delete(userId)) {
+        void Promise.resolve().then(() => retryOrderSyncRef.current(userId));
+      }
+    }
+  }, [show]);
+
+  useEffect(() => {
+    retryOrderSyncRef.current = retryOrderSync;
+  }, [retryOrderSync]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    let active = true;
+    const userId = currentUser.id;
+    void orderRepository.list(userId, (error) => {
+      if (active) show(error instanceof Error ? `Pedidos guardados en el dispositivo; no se pudieron sincronizar: ${error.message}` : 'No se pudieron sincronizar los pedidos con Firebase.', 'error');
+    }).then((storedOrders) => {
+      if (active) {
+        setOrders((current) => [
+          ...current.filter((order) => order.userId !== userId),
+          ...storedOrders,
+        ]);
+        void retryOrderSync(userId);
+      }
+    }).catch((error: unknown) => {
+      if (active) show(error instanceof Error ? error.message : 'No se pudieron cargar los pedidos.', 'error');
+    });
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) void retryOrderSync(userId);
+    });
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [currentUser, retryOrderSync, show]);
+
+  const checkoutOrder = useCallback(async (user: User, lines: CheckoutLine[], input: CheckoutInput, paymentMethod: PaymentMethod, paymentDetails: OrderPaymentDetails) => {
     if (lines.length === 0) throw new Error('No se puede crear un pedido sin productos.');
 
     const currency = lines[0].product.currency;
@@ -57,6 +168,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
 
     const order = await orderRepository.checkout({
       userId: user.id,
+      user,
       shippingAddress: {
         id: generateId('adr'),
         userId: user.id,
@@ -68,6 +180,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         postalCode: input.postalCode.trim() || undefined,
         countryCode: input.countryCode.trim().toUpperCase(),
       },
+      paymentMethod,
+      paymentDetails,
       currency,
       items: lines.map(({ product, quantity }) => ({
         productId: product.id,
@@ -79,24 +193,34 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     });
     setOrders((current) => [order, ...current]);
     setUnreadOrderIds((current) => ({ ...current, [user.id]: [order.id, ...(current[user.id] ?? [])] }));
+    void retryOrderSync(user.id);
     return order;
-  }, []);
+  }, [retryOrderSync]);
 
   const updateOrder = useCallback(async (orderId: string, userId: string, changes: OrderUpdate) => {
     const order = await orderRepository.update(orderId, userId, changes);
     setOrders((current) => current.map((item) => item.id === order.id ? order : item));
+    void retryOrderSync(userId);
     return order;
-  }, []);
+  }, [retryOrderSync]);
 
   const cancelOrder = useCallback(async (orderId: string, userId: string) => {
     const order = await orderRepository.delete(orderId, userId);
     setOrders((current) => current.map((item) => item.id === order.id ? order : item));
+    void retryOrderSync(userId);
     return order;
-  }, []);
+  }, [retryOrderSync]);
+
+  const attachReceipt = useCallback(async (orderId: string, userId: string, localUri: string) => {
+    const order = await orderRepository.attachReceipt(orderId, userId, localUri);
+    setOrders((current) => current.map((item) => item.id === order.id ? order : item));
+    void retryOrderSync(userId);
+    return order;
+  }, [retryOrderSync]);
 
   const value = useMemo(
-    () => ({ orders, unreadOrderCount, markOrdersRead, checkoutOrder, updateOrder, cancelOrder }),
-    [orders, unreadOrderCount, markOrdersRead, checkoutOrder, updateOrder, cancelOrder],
+    () => ({ orders: visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder, attachReceipt, retryOrderSync }),
+    [visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder, attachReceipt, retryOrderSync],
   );
   return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;
 }

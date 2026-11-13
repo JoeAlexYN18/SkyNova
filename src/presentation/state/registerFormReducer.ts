@@ -3,7 +3,6 @@ import { Country } from '../../domain/entities/Country';
 export interface RegisterFormValues {
   fullName: string;
   email: string;
-  username: string;
   country: Country;
   phoneNumber: string;
   password: string;
@@ -34,7 +33,6 @@ export function buildInitialRegisterFormState(
     values: {
       fullName: '',
       email: '',
-      username: '',
       country: defaultCountry,
       phoneNumber: '',
       password: '',

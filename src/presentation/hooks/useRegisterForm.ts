@@ -2,10 +2,7 @@
 
 import { useCallback, useReducer } from 'react';
 import { Country } from '@/domain/entities/Country';
-import {
-  EmailAlreadyRegisteredError,
-  UsernameTakenError,
-} from '@/domain/errors/UserErrors';
+import { EmailAlreadyRegisteredError } from '@/domain/errors/UserErrors';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import {
@@ -23,7 +20,6 @@ import {
   validatePassword,
   validatePhoneNumber,
   validateTerms,
-  validateUsername,
 } from '@/shared/validators/formValidators';
 
 
@@ -31,7 +27,6 @@ function validateAllFields(values: RegisterFormValues): RegisterFormErrors {
   const errors: RegisterFormErrors = {
     fullName: validateFullName(values.fullName),
     email: validateEmail(values.email),
-    username: validateUsername(values.username),
     phoneNumber: validatePhoneNumber(values.phoneNumber, values.country.code),
     password: validatePassword(values.password),
     confirmPassword: validateConfirmPassword(values.password, values.confirmPassword),
@@ -75,7 +70,6 @@ export function useRegisterForm(defaultCountry: Country) {
       await register({
         fullName: state.values.fullName,
         email: state.values.email,
-        username: state.values.username,
         phone: {
           countryCode: state.values.country.code,
           dialCode: state.values.country.dialCode,
@@ -90,8 +84,6 @@ export function useRegisterForm(defaultCountry: Country) {
     } catch (error) {
       if (error instanceof EmailAlreadyRegisteredError) {
         dispatch({ type: 'SET_ERRORS', errors: { email: MESSAGES.EMAIL_TAKEN } });
-      } else if (error instanceof UsernameTakenError) {
-        dispatch({ type: 'SET_ERRORS', errors: { username: MESSAGES.USERNAME_TAKEN } });
       } else {
         show(MESSAGES.REGISTER_GENERIC_ERROR, 'error');
       }

@@ -5,6 +5,24 @@ export interface ProductBrand {
   color: string;
 }
 
+export interface ProductImage {
+  id: string;
+  url: string;
+  altText: string;
+  displayOrder: number;
+  isPrimary: boolean;
+}
+
+export interface ProductReview {
+  id: string;
+  productId: string;
+  userId: string;
+  reviewerName: string;
+  rating: number;
+  reviewText?: string;
+  createdAt: string;
+}
+
 export interface Product {
   id: string;
   categoryId: string;
@@ -32,6 +50,7 @@ export interface Product {
 
   imageUrl?: string;
   imageAlt?: string;
+  images?: ProductImage[];
 }
 
 export interface ProductCategory {

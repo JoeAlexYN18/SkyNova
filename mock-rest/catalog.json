@@ -1,0 +1,45 @@
+{
+  "categories": [
+    { "id": "cat-rest-drones", "name": "Drones", "product_type": "drone" },
+    { "id": "cat-rest-accessories", "name": "Accesorios", "product_type": "accessory" }
+  ],
+  "products": [
+    {
+      "id": "rest-drone-001",
+      "category_id": "cat-rest-drones",
+      "sku": "SN-REST-DRONE-001",
+      "name": "Dron Explorer 4K",
+      "description": "Dron de demostración con cámara 4K y control estable.",
+      "product_type": "drone",
+      "brand": "SkyNova",
+      "price": 499,
+      "compare_at_price": 549,
+      "currency": "USD",
+      "stock_quantity": 8,
+      "is_active": true,
+      "is_featured": true,
+      "is_home_visible": true,
+      "created_at": "2026-10-01T00:00:00.000Z"
+    },
+    {
+      "id": "rest-accessory-001",
+      "category_id": "cat-rest-accessories",
+      "sku": "SN-REST-ACC-001",
+      "name": "Batería de repuesto",
+      "description": "Batería adicional para ampliar el tiempo de vuelo.",
+      "product_type": "accessory",
+      "brand": "SkyNova",
+      "price": 59,
+      "currency": "USD",
+      "stock_quantity": 20,
+      "is_active": true,
+      "is_featured": false,
+      "is_home_visible": true,
+      "created_at": "2026-10-01T00:00:00.000Z"
+    }
+  ],
+  "specs": [
+    { "id": "rest-drone-001", "product_id": "rest-drone-001", "max_flight_minutes": 32 }
+  ],
+  "images": []
+}

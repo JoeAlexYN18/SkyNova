@@ -15,6 +15,13 @@ export class InvalidPasswordError extends Error {
   }
 }
 
+export class InvalidCredentialsError extends Error {
+  constructor() {
+    super();
+    this.name = 'InvalidCredentialsError';
+  }
+}
+
 
 export async function authenticateUser(
   repository: IUserRepository,
@@ -24,5 +31,6 @@ export async function authenticateUser(
   const result = await repository.authenticate(identifier.trim(), password);
   if (result.status === 'identifier_not_found') throw new UserIdentifierNotFoundError();
   if (result.status === 'invalid_password') throw new InvalidPasswordError();
+  if (result.status === 'invalid_credentials') throw new InvalidCredentialsError();
   return result.user;
 }

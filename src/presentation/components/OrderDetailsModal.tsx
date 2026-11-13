@@ -2,10 +2,11 @@
 
 import React, { useMemo, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { CheckoutInput, Order } from '@/domain/entities/Order';
+import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
+import type { CardBrand, CheckoutInput, Order } from '@/domain/entities/Order';
 import { COUNTRIES } from '@/infrastructure/data/countries';
 import { useToast } from '@/infrastructure/context/ToastContext';
+import { useAuth } from '@/infrastructure/context/AuthContext';
 import { colors, radius, spacing } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { validatePhoneNumber } from '@/shared/validators/formValidators';
@@ -17,13 +18,14 @@ interface Props {
   onCancel: () => Promise<void>;
 }
 
-const addressFields: { key: keyof CheckoutInput; label: string }[] = [
+const addressFields: { key: keyof CheckoutInput | 'country'; label: string }[] = [
   { key: 'recipient', label: 'Nombre completo' },
+  { key: 'country', label: 'País' },
   { key: 'phone', label: 'Número de teléfono' },
   { key: 'line1', label: 'Dirección' },
   { key: 'city', label: 'Ciudad' },
-  { key: 'region', label: 'Estado / Provincia / Región' },
-  { key: 'postalCode', label: 'Código postal' },
+  { key: 'region', label: 'Estado / Provincia / Región (opcional)' },
+  { key: 'postalCode', label: 'Código postal (opcional)' },
 ];
 
 export function OrderDetailsModal({ order, onClose, onSaveAddress, onCancel }: Props) {
@@ -34,13 +36,18 @@ export function OrderDetailsModal({ order, onClose, onSaveAddress, onCancel }: P
   const [countrySearch, setCountrySearch] = useState('');
   const [busy, setBusy] = useState(false);
   const { show } = useToast();
+  const { currentUser } = useAuth();
+  const phoneCountryCode = address.countryCode || currentUser?.phone.countryCode || '';
+  const phoneDialCode = COUNTRIES.find((country) => country.code === address.countryCode)?.dialCode
+    ?? currentUser?.phone.dialCode
+    ?? '';
 
   const canSaveAddress = useMemo(
     () => !!address.recipient.trim() && !!address.phone.trim() && !!address.line1.trim()
-      && !!address.city.trim() && !!address.region.trim() && !!address.postalCode.trim()
-      && !validatePhoneNumber(address.phone, address.countryCode)
+      && !!address.city.trim()
+      && !validatePhoneNumber(address.phone, phoneCountryCode || address.countryCode)
       && COUNTRIES.some((country) => country.code === address.countryCode),
-    [address],
+    [address, phoneCountryCode],
   );
   const filteredCountries = useMemo(() => {
     const query = countrySearch.trim().toLocaleLowerCase();
@@ -124,6 +131,41 @@ export function OrderDetailsModal({ order, onClose, onSaveAddress, onCancel }: P
               </View>
             </View>
 
+            {order.paymentMethod && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Método de pago</Text>
+                <View style={styles.paymentRow}>
+                  <View style={[
+                    styles.paymentBrand,
+                    order.paymentMethod === 'yape' ? styles.paymentYape : styles.paymentVisa,
+                  ]}>
+                    {order.paymentMethod === 'visa'
+                      ? <FontAwesome name={cardBrandIcons[order.paymentDetails?.cardBrand ?? 'other']} size={36} color="#1434CB" />
+                      : <Text style={[styles.paymentBrandText, styles.paymentYapeText]}>YAPE</Text>}
+                  </View>
+                  <View style={styles.addressCopy}>
+                    <Text style={styles.addressLine}>
+                      {order.paymentMethod === 'yape'
+                        ? 'Yape · Billetera digital'
+                        : `${cardBrandLabels[order.paymentDetails?.cardBrand ?? 'other']} · Tarjeta`}
+                    </Text>
+                    {order.paymentMethod === 'yape' && order.paymentDetails?.phone ? (
+                      <Text style={styles.addressLine}>{order.paymentDetails.phone}</Text>
+                    ) : order.paymentMethod === 'visa' && order.paymentDetails ? (
+                      <>
+                        <Text style={styles.addressLine}>
+                          •••• {order.paymentDetails.cardLast4 ?? '••••'}{order.paymentDetails.cardExpiry ? ` · Vence ${order.paymentDetails.cardExpiry}` : ''}
+                        </Text>
+                        {order.paymentDetails.cardholderName ? (
+                          <Text style={styles.addressLine}>{order.paymentDetails.cardholderName}</Text>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            )}
+
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Datos de entrega</Text>
@@ -173,44 +215,66 @@ export function OrderDetailsModal({ order, onClose, onSaveAddress, onCancel }: P
                 {addressFields.map(({ key, label }) => (
                 <View key={key} style={styles.field}>
                   <Text style={styles.fieldLabel}>{label}</Text>
+                  {key === 'country' ? (
+                    <>
+                      <TouchableOpacity onPress={() => setCountryPickerOpen(true)} style={styles.countrySelect} accessibilityRole="button">
+                        <Text style={styles.countryFlag}>{COUNTRIES.find((country) => country.code === address.countryCode)?.flag ?? '🌐'}</Text>
+                        <Text style={styles.countryName}>
+                          {COUNTRIES.find((country) => country.code === address.countryCode)?.name ?? address.countryCode}
+                        </Text>
+                        <MaterialCommunityIcons name="chevron-down" size={18} color={colors.textMuted} />
+                      </TouchableOpacity>
+                      {submittedAddress && !COUNTRIES.some((country) => country.code === address.countryCode) && (
+                        <Text style={styles.fieldError}>Selecciona un país para continuar.</Text>
+                      )}
+                    </>
+                  ) : key === 'phone' ? (
+                    <>
+                      <View style={styles.phoneRow}>
+                        <View style={styles.phoneDial}>
+                          <Text style={styles.phoneDialText}>{phoneDialCode}</Text>
+                        </View>
+                        <TextInput
+                          value={address[key]}
+                          onChangeText={(value) => setAddress((current) => ({ ...current, [key]: value }))}
+                          placeholder="999 888 777"
+                          placeholderTextColor={colors.placeholder}
+                          autoCapitalize="none"
+                          keyboardType="phone-pad"
+                          autoComplete="tel"
+                          style={[styles.input, styles.phoneInput]}
+                        />
+                      </View>
+                      {submittedAddress && !!address.phone.trim() && !!validatePhoneNumber(address.phone, phoneCountryCode) && (
+                        <Text style={styles.fieldError}>Ingresa un número de teléfono válido para el país seleccionado.</Text>
+                      )}
+                      {submittedAddress && !address.phone.trim() && (
+                        <Text style={styles.fieldError}>Completa este campo para continuar.</Text>
+                      )}
+                    </>
+                  ) : (
+                  <>
                   <TextInput
-                    value={address[key]}
+                    value={address[key as keyof CheckoutInput]}
                     onChangeText={(value) => setAddress((current) => ({ ...current, [key]: value }))}
                     placeholder={label}
                     placeholderTextColor={colors.placeholder}
-                    autoCapitalize={key === 'phone' || key === 'postalCode' ? 'none' : key === 'line1' ? 'sentences' : 'words'}
-                    keyboardType={key === 'phone' ? 'phone-pad' : 'default'}
+                    autoCapitalize={key === 'postalCode' ? 'none' : 'words'}
                     autoComplete={
                       key === 'recipient' ? 'name'
-                        : key === 'phone' ? 'tel'
-                          : key === 'line1' ? 'address-line1'
-                            : key === 'postalCode' ? 'postal-code'
-                              : 'off'
+                        : key === 'line1' ? 'address-line1'
+                          : key === 'postalCode' ? 'postal-code'
+                            : 'off'
                     }
                     style={styles.input}
                   />
-                  {submittedAddress && (!address[key].trim() || (key === 'phone' && validatePhoneNumber(address.phone, address.countryCode))) && (
-                    <Text style={styles.fieldError}>
-                      {key === 'phone' && address.phone.trim()
-                        ? 'Ingresa un número válido para el país seleccionado.'
-                        : 'Completa este campo para continuar.'}
-                    </Text>
+                  {submittedAddress && !address[key as keyof CheckoutInput].trim() && ['recipient', 'line1', 'city'].includes(key) && (
+                    <Text style={styles.fieldError}>Completa este campo para continuar.</Text>
+                  )}
+                  </>
                   )}
                 </View>
                 ))}
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>País</Text>
-                  <TouchableOpacity onPress={() => setCountryPickerOpen(true)} style={styles.countrySelect} accessibilityRole="button">
-                    <Text style={styles.countryFlag}>{COUNTRIES.find((country) => country.code === address.countryCode)?.flag ?? '🌐'}</Text>
-                    <Text style={styles.countryName}>
-                      {COUNTRIES.find((country) => country.code === address.countryCode)?.name ?? address.countryCode}
-                    </Text>
-                    <MaterialCommunityIcons name="chevron-down" size={18} color={colors.textMuted} />
-                  </TouchableOpacity>
-                  {submittedAddress && !COUNTRIES.some((country) => country.code === address.countryCode) && (
-                    <Text style={styles.fieldError}>Selecciona un país para continuar.</Text>
-                  )}
-                </View>
               </> : (
                 <View style={styles.addressCopy}>
                   <Text style={styles.addressLine}>{order.shippingAddress.recipient}</Text>
@@ -271,7 +335,7 @@ function emptyAddress(): CheckoutInput {
 function addressFromOrder(order: Order): CheckoutInput {
   return {
     recipient: order.shippingAddress.recipient,
-    phone: order.shippingAddress.phone,
+    phone: order.shippingAddress.phone.replace(/^\+\d{1,4}\s*/, ''),
     line1: order.shippingAddress.line1,
     city: order.shippingAddress.city,
     region: order.shippingAddress.region ?? '',
@@ -279,6 +343,22 @@ function addressFromOrder(order: Order): CheckoutInput {
     countryCode: order.shippingAddress.countryCode,
   };
 }
+
+const cardBrandIcons: Record<CardBrand, 'cc-visa' | 'cc-mastercard' | 'cc-amex' | 'cc-discover' | 'credit-card'> = {
+  visa: 'cc-visa',
+  mastercard: 'cc-mastercard',
+  amex: 'cc-amex',
+  discover: 'cc-discover',
+  other: 'credit-card',
+};
+
+const cardBrandLabels: Record<CardBrand, string> = {
+  visa: 'Visa',
+  mastercard: 'Mastercard',
+  amex: 'American Express',
+  discover: 'Discover',
+  other: 'Tarjeta',
+};
 
 const statusLabels: Record<Order['status'], string> = {
   pending: 'Pendiente',
@@ -313,6 +393,12 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: spacing.md },
   totalLabel: { color: colors.textPrimary, fontSize: 13, fontWeight: '800' },
   totalValue: { color: colors.textPrimary, fontSize: 15, fontWeight: '900' },
+  paymentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  paymentBrand: { width: 58, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  paymentYape: { backgroundColor: '#742384' },
+  paymentVisa: { backgroundColor: '#F6F8FC', borderWidth: 1, borderColor: '#DDE3EE' },
+  paymentBrandText: { fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
+  paymentYapeText: { color: colors.white },
   editButton: { flexDirection: 'row', alignItems: 'center', gap: 4, padding: spacing.xs },
   editText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
   addressCopy: { gap: 4 },
@@ -321,6 +407,10 @@ const styles = StyleSheet.create({
   fieldLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '700', marginBottom: 5 },
   fieldError: { color: colors.danger, fontSize: 11, marginTop: 4 },
   input: { minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, color: colors.textPrimary, fontSize: 13 },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  phoneDial: { minHeight: 44, minWidth: 56, paddingHorizontal: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  phoneDialText: { color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
+  phoneInput: { flex: 1, borderLeftWidth: 0, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
   countrySelect: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
   countryRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
   countryFlag: { fontSize: 18 },
