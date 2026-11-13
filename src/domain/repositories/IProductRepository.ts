@@ -1,14 +1,11 @@
-import type { Product, ProductBrand, ProductCategory, ProductReview, ProductType } from '../entities/Product';
+import type { Product, ProductBrand, ProductCategory, ProductReview } from '../entities/Product';
 
 export type ProductSort = 'relevance' | 'price_asc' | 'price_desc' | 'best_selling' | 'best_rated' | 'newest';
 
 export interface ProductQuery {
   search?: string;
-  categoryId?: string;
   categoryIds?: string[];
   brand?: string;
-  productType?: ProductType;
-  productTypes?: ProductType[];
   isOffer?: boolean;
   isFeatured?: boolean;
   minPrice?: number;

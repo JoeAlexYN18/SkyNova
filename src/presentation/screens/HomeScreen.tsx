@@ -211,11 +211,7 @@ export function HomeScreen() {
   }, [show]);
 
   const { userOrders, activeOrders, deliveredOrders, cancelledOrders } = useMemo(() => {
-    const userOrders = currentUser
-      ? orders
-        .filter((order) => order.userId === currentUser.id)
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      : [];
+    const userOrders = [...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const grouped = {
       userOrders,
       activeOrders: [] as Order[],
@@ -234,7 +230,7 @@ export function HomeScreen() {
     }
 
     return grouped;
-  }, [orders, currentUser]);
+  }, [orders]);
   const selectedOrder = useMemo(
     () => userOrders.find((order) => order.id === selectedOrderId) ?? null,
     [userOrders, selectedOrderId],

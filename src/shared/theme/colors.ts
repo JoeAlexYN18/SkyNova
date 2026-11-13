@@ -4,13 +4,11 @@ export const colors = {
   surface: '#121A2C',
   surfaceAlt: '#0C1322',
   inputBackground: '#0E1626',
-  inputBackgroundFocused: '#101A2E',
   border: 'rgba(148, 163, 184, 0.14)',
   borderFocused: '#22D3EE',
   borderError: '#F87171',
 
   primary: '#22D3EE',
-  primaryPressed: '#0FB8D4',
   onPrimary: '#04141A',
 
   textPrimary: '#F8FAFC',
@@ -26,5 +24,3 @@ export const colors = {
   overlay: 'rgba(3, 7, 18, 0.72)',
   white: '#FFFFFF',
 } as const;
-
-export type AppColors = typeof colors;

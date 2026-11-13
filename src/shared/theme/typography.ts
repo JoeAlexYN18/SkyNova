@@ -7,6 +7,5 @@ export const typography = {
   body: { fontSize: 15, fontWeight: '500' as const },
   button: { fontSize: 16, fontWeight: '700' as const },
   caption: { fontSize: 11.5, fontWeight: '500' as const },
-  link: { fontSize: 13, fontWeight: '700' as const },
   footer: { fontSize: 10.5, fontWeight: '600' as const, letterSpacing: 0.4 },
 };

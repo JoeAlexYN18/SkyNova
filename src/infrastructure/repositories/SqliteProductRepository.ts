@@ -339,21 +339,15 @@ export class SqliteProductRepository implements IProductRepository {
   async listProducts(query: ProductQuery = {}) {
     const { products: catalogProducts, categories: catalogCategories } = await this.loadCatalog();
     const categoriesById = new Map(catalogCategories.map((category) => [category.id, category]));
+    const searchTerms = getSearchTerms(query.search ?? '');
     const searchableProducts = catalogProducts.map((product) => ({
       product,
-      name: normalizeSearchText(product.name),
-      brand: normalizeSearchText(product.brand),
-      sku: normalizeSearchText(product.sku),
-      text: buildSearchText(product, categoriesById),
+      text: searchTerms.length ? buildSearchText(product, categoriesById) : '',
     }));
-    const searchTerms = getSearchTerms(query.search ?? '');
     const brand = query.brand?.trim().toLocaleLowerCase();
     const matches = searchableProducts.filter(({ product, text }) => {
       if (!product.isActive) return false;
-      if (query.categoryId && product.categoryId !== query.categoryId) return false;
       if (query.categoryIds?.length && !query.categoryIds.includes(product.categoryId)) return false;
-      if (query.productType && product.productType !== query.productType) return false;
-      if (query.productTypes && !query.productTypes.includes(product.productType)) return false;
       if (query.isOffer && !(product.compareAtPrice && product.compareAtPrice > product.price)) return false;
       if (query.isFeatured && !product.isFeatured) return false;
       if (query.minPrice !== undefined && product.price < query.minPrice) return false;

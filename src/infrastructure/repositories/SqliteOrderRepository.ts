@@ -18,7 +18,6 @@ type OrderRow = {
   status: Order['status'];
   sync_status: NonNullable<Order['syncStatus']>;
   sync_error: string | null;
-  receipt_local_uri: string | null;
   receipt_storage_path: string | null;
   payment_method: Order['paymentMethod'] | null;
   payment_details: string | null;
@@ -121,7 +120,6 @@ export class SqliteOrderRepository implements IOrderRepository {
         status: row.status,
         syncStatus: row.sync_status,
         syncError: row.sync_error ?? undefined,
-        receiptLocalUri: row.receipt_local_uri ?? undefined,
         receiptStoragePath: row.receipt_storage_path ?? undefined,
         paymentMethod: row.payment_method ?? undefined,
         paymentDetails: parsePaymentDetails(row.payment_details),
@@ -140,14 +138,9 @@ export class SqliteOrderRepository implements IOrderRepository {
     return orders;
   }
 
-  async create(input: NewOrderInput) {
-    validateInput(input);
-    return this.persist(input, 'pending', true);
-  }
-
   async checkout(input: NewOrderInput) {
     validateInput(input);
-    return this.persist(input, 'paid', true);
+    return this.persist(input);
   }
 
   async update(orderId: string, userId: string, changes: OrderUpdate) {
@@ -223,21 +216,6 @@ export class SqliteOrderRepository implements IOrderRepository {
     return cancelled;
   }
 
-  async attachReceipt(orderId: string, userId: string, localUri: string) {
-    const database = await getDatabase();
-    const result = await database.runAsync(
-      "UPDATE orders SET receipt_local_uri = ?, receipt_storage_path = NULL, sync_status = 'pending', sync_error = NULL, updated_at = ? WHERE id = ? AND user_id = ?",
-      localUri,
-      new Date().toISOString(),
-      orderId,
-      userId,
-    );
-    if (result.changes === 0) throw new Error('No se encontró el pedido para adjuntar el comprobante.');
-    const order = (await this.list(userId)).find((candidate) => candidate.id === orderId);
-    if (!order) throw new Error('No se pudo recuperar el pedido actualizado.');
-    return order;
-  }
-
   async markOrderSynced(orderId: string, userId: string, updatedAt: string, receiptStoragePath?: string) {
     const database = await getDatabase();
     await database.runAsync(
@@ -259,14 +237,14 @@ export class SqliteOrderRepository implements IOrderRepository {
     );
   }
 
-  private async persist(input: NewOrderInput, status: Order['status'], reserveStock: boolean) {
+  private async persist(input: NewOrderInput) {
     const database = await getDatabase();
     const now = new Date().toISOString();
     const order: Order = {
       id: generateId('ord'),
       userId: input.userId,
       shippingAddress: { ...input.shippingAddress },
-      status,
+      status: 'paid',
       paymentMethod: input.paymentMethod,
       paymentDetails: input.paymentDetails ? { ...input.paymentDetails } : undefined,
       syncStatus: 'pending',
@@ -279,23 +257,21 @@ export class SqliteOrderRepository implements IOrderRepository {
     await withDatabaseTransaction(database, async () => {
       await this.ensureUser(input);
       await this.saveAddress(input.shippingAddress, true);
-      if (reserveStock) {
-        for (const item of input.items) {
-          if (!item.productId) throw new Error('No se encontró el producto solicitado.');
-          const product = await database.getFirstAsync<{ stock_quantity: number; is_active: number }>(
-            'SELECT stock_quantity, is_active FROM products WHERE id = ?',
-            item.productId,
-          );
-          if (!product || product.is_active !== 1 || product.stock_quantity < item.quantity) {
-            throw new Error(`Stock insuficiente para ${item.productName}.`);
-          }
-          await database.runAsync(
-            'UPDATE products SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
-            item.quantity,
-            now,
-            item.productId,
-          );
+      for (const item of input.items) {
+        if (!item.productId) throw new Error('No se encontró el producto solicitado.');
+        const product = await database.getFirstAsync<{ stock_quantity: number; is_active: number }>(
+          'SELECT stock_quantity, is_active FROM products WHERE id = ?',
+          item.productId,
+        );
+        if (!product || product.is_active !== 1 || product.stock_quantity < item.quantity) {
+          throw new Error(`Stock insuficiente para ${item.productName}.`);
         }
+        await database.runAsync(
+          'UPDATE products SET stock_quantity = stock_quantity - ?, updated_at = ? WHERE id = ?',
+          item.quantity,
+          now,
+          item.productId,
+        );
       }
       await database.runAsync(
         `INSERT INTO orders (id, user_id, shipping_address_id, status, payment_method, payment_details, currency, created_at, updated_at)

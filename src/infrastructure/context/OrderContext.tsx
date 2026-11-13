@@ -20,8 +20,6 @@ interface OrderContextValue {
   checkoutOrder: (user: User, lines: CheckoutLine[], address: CheckoutInput, paymentMethod: PaymentMethod, paymentDetails: OrderPaymentDetails) => Promise<Order>;
   updateOrder: (orderId: string, userId: string, changes: OrderUpdate) => Promise<Order>;
   cancelOrder: (orderId: string, userId: string) => Promise<Order>;
-  attachReceipt: (orderId: string, userId: string, localUri: string) => Promise<Order>;
-  retryOrderSync: (userId: string) => Promise<boolean>;
 }
 
 const OrderContext = createContext<OrderContextValue | undefined>(undefined);
@@ -211,16 +209,9 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     return order;
   }, [retryOrderSync]);
 
-  const attachReceipt = useCallback(async (orderId: string, userId: string, localUri: string) => {
-    const order = await orderRepository.attachReceipt(orderId, userId, localUri);
-    setOrders((current) => current.map((item) => item.id === order.id ? order : item));
-    void retryOrderSync(userId);
-    return order;
-  }, [retryOrderSync]);
-
   const value = useMemo(
-    () => ({ orders: visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder, attachReceipt, retryOrderSync }),
-    [visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder, attachReceipt, retryOrderSync],
+    () => ({ orders: visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder }),
+    [visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder],
   );
   return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;
 }

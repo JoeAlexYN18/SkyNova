@@ -10,7 +10,7 @@ import { productRepository } from '@/infrastructure/container';
 import { useToast } from '@/infrastructure/context/ToastContext';
 
 interface CartLine { product: Product; quantity: number }
-type CartAction = { userId: string; type: 'add'; product: Product } | { userId: string; type: 'remove'; productId: string } | { userId: string; type: 'quantity'; productId: string; quantity: number } | { userId: string; type: 'clear' } | { userId: string; type: 'forget' };
+type CartAction = { userId: string; type: 'add'; product: Product } | { userId: string; type: 'remove'; productId: string } | { userId: string; type: 'quantity'; productId: string; quantity: number } | { userId: string; type: 'set'; lines: CartLine[] } | { userId: string; type: 'clear' } | { userId: string; type: 'forget' };
 
 function cartReducer(state: Record<string, CartLine[]>, action: CartAction): Record<string, CartLine[]> {
   if (action.type === 'forget') {
@@ -19,6 +19,7 @@ function cartReducer(state: Record<string, CartLine[]>, action: CartAction): Rec
     return remaining;
   }
   const lines = state[action.userId] ?? [];
+  if (action.type === 'set') return { ...state, [action.userId]: action.lines };
   if (action.type === 'remove') return { ...state, [action.userId]: lines.filter((line) => line.product.id !== action.productId) };
   if (action.type === 'clear') return { ...state, [action.userId]: [] };
   if (action.type === 'quantity') return { ...state, [action.userId]: lines.flatMap((line) => {
@@ -77,7 +78,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     let active = true;
     void (async () => {
       try {
-        await productRepository.listProducts({ page: 1, pageSize: 1000 });
+        const products = await productRepository.listProducts({ page: 1, pageSize: 1000 });
         await cacheUserProfile(currentUser);
         const database = await getDatabase();
         const cart = await database.getFirstAsync<{ id: string }>(
@@ -96,7 +97,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
            JOIN carts c ON c.id = ci.cart_id WHERE c.user_id = ?`,
           currentUser.id,
         );
-        const products = await productRepository.listProducts({ page: 1, pageSize: 1000 });
         const byId = new Map(products.items.map((product) => [product.id, product]));
         let persistedLines = rows.flatMap((row) => {
           const product = byId.get(row.product_id);
@@ -148,7 +148,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
         if (!active) return;
         hydratedUsers.current.add(currentUser.id);
-        setCartForUser(dispatch, currentUser.id, persistedLines);
+        dispatch({ type: 'set', userId: currentUser.id, lines: persistedLines });
       } catch (error) {
         if (active) show(error instanceof Error ? error.message : 'No se pudo cargar el carrito guardado.', 'error');
       }
@@ -235,19 +235,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     clearCart: () => { if (currentUser) dispatch({ type: 'clear', userId: currentUser.id }); },
   }), [lines, totals, currentUser, waitForPendingWrites, forgetAccountCart]);
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
-}
-
-function setCartForUser(
-  dispatch: React.Dispatch<CartAction>,
-  userId: string,
-  lines: CartLine[],
-) {
-  dispatch({ type: 'clear', userId });
-  lines.forEach(({ product, quantity }) => {
-    for (let count = 0; count < quantity; count += 1) {
-      dispatch({ type: 'add', userId, product });
-    }
-  });
 }
 
 export function useCart() {
