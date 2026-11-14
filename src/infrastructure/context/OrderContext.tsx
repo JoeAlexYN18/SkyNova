@@ -10,6 +10,7 @@ import { useToast } from '@/infrastructure/context/ToastContext';
 import { generateId } from '@/shared/utils/generateId';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { orderSyncConfigured, syncOrderToServices } from '@/infrastructure/data/orderSyncService';
+import { isAuthSessionError, isFirebaseNetworkError } from '@/infrastructure/data/firebaseDataSync';
 
 interface OrderContextValue {
   orders: Order[];
@@ -20,12 +21,16 @@ interface OrderContextValue {
   checkoutOrder: (user: User, lines: CheckoutLine[], address: CheckoutInput, paymentMethod: PaymentMethod, paymentDetails: OrderPaymentDetails) => Promise<Order>;
   updateOrder: (orderId: string, userId: string, changes: OrderUpdate) => Promise<Order>;
   cancelOrder: (orderId: string, userId: string) => Promise<Order>;
+  retryOrderSync: (userId: string) => Promise<boolean>;
+  orderSyncEnabled: boolean;
+  ordersLoaded: boolean;
 }
 
 const OrderContext = createContext<OrderContextValue | undefined>(undefined);
 
 export function OrderProvider({ children }: { children: React.ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [loadedOrdersUserId, setLoadedOrdersUserId] = useState<string | null>(null);
   const [unreadOrderIds, setUnreadOrderIds] = useState<Record<string, string[]>>({});
   const syncingUsers = useRef(new Set<string>());
   const syncRequestedUsers = useRef(new Set<string>());
@@ -76,7 +81,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     setUnreadOrderIds((current) => ({ ...current, [userId]: [] }));
   }, []);
   const getDefaultAddress = useCallback((userId: string) => orderRepository.getDefaultAddress(userId, (error) => {
-    show(error instanceof Error ? `Se usará la dirección local: ${error.message}` : 'No se pudo sincronizar la dirección con Firebase.');
+    if (isAuthSessionError(error, userId) || isFirebaseNetworkError(error)) return;
+    show('No se pudo sincronizar la dirección; se usará la copia local.', 'info');
   }), [show]);
 
   const retryOrderSync = useCallback(async (userId: string) => {
@@ -96,9 +102,10 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
           await syncOrderToServices(order);
           await orderRepository.markOrderSynced(order.id, userId, order.updatedAt);
         } catch (error) {
+          if (isAuthSessionError(error, userId)) break;
           const message = error instanceof Error ? error.message : 'No se pudo sincronizar el pedido.';
           await orderRepository.markOrderSyncError(order.id, userId, message);
-          show(`Pedido #${order.id.slice(-8).toUpperCase()} guardado localmente: ${message}`, 'error');
+          show(`Pedido #${order.id.slice(-8).toUpperCase()} guardado en tu dispositivo; lo confirmaremos automáticamente.`, 'error');
         }
       }
       const refreshedOrders = await orderRepository.list(userId);
@@ -108,7 +115,9 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       ]);
       return refreshedOrders.every((order) => order.syncStatus === 'synced');
     } catch (error) {
-      show(error instanceof Error ? error.message : 'No se pudo revisar la cola de pedidos.', 'error');
+      if (!isAuthSessionError(error, userId) && !isFirebaseNetworkError(error)) {
+        show('No se pudo revisar la cola de pedidos; se reintentará automáticamente.', 'info');
+      }
       return false;
     } finally {
       syncingUsers.current.delete(userId);
@@ -127,7 +136,9 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     let active = true;
     const userId = currentUser.id;
     void orderRepository.list(userId, (error) => {
-      if (active) show(error instanceof Error ? `Pedidos guardados en el dispositivo; no se pudieron sincronizar: ${error.message}` : 'No se pudieron sincronizar los pedidos con Firebase.', 'error');
+      if (active && !isAuthSessionError(error, userId) && !isFirebaseNetworkError(error)) {
+        show('Pedidos guardados en el dispositivo; no se pudieron sincronizar. Se reintentará automáticamente.', 'info');
+      }
     }).then((storedOrders) => {
       if (active) {
         setOrders((current) => [
@@ -137,7 +148,9 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         void retryOrderSync(userId);
       }
     }).catch((error: unknown) => {
-      if (active) show(error instanceof Error ? error.message : 'No se pudieron cargar los pedidos.', 'error');
+      if (active && !isFirebaseNetworkError(error)) show('No se pudieron cargar los pedidos.', 'error');
+    }).finally(() => {
+      if (active) setLoadedOrdersUserId(userId);
     });
     const subscription = Network.addNetworkStateListener((state) => {
       if (state.isConnected && state.isInternetReachable !== false) void retryOrderSync(userId);
@@ -209,9 +222,10 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     return order;
   }, [retryOrderSync]);
 
+  const ordersLoaded = loadedOrdersUserId !== null && loadedOrdersUserId === currentUser?.id;
   const value = useMemo(
-    () => ({ orders: visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder }),
-    [visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder],
+    () => ({ orders: visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder, retryOrderSync, orderSyncEnabled: orderSyncConfigured, ordersLoaded }),
+    [visibleOrders, unreadOrderCount, markOrdersRead, forgetUserData, getDefaultAddress, checkoutOrder, updateOrder, cancelOrder, retryOrderSync, ordersLoaded],
   );
   return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;
 }

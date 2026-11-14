@@ -11,6 +11,7 @@ import { MESSAGES } from '@/shared/constants/messages';
 import { validateEmail, validatePassword } from '@/shared/validators/formValidators';
 import { colors, spacing, typography } from '@/shared/theme';
 import { firebaseConfigured } from '@/infrastructure/data/firebaseServices';
+import { isFirebaseNetworkError } from '@/infrastructure/data/firebaseDataSync';
 
 export function ForgotPasswordScreen() {
   const { resetPassword, sendPasswordReset } = useAuth();
@@ -52,8 +53,17 @@ export function ForgotPasswordScreen() {
       }
       show('Tu contraseña se actualizó. Ya puedes iniciar sesión.', 'success');
       router.replace('/login' as never);
-    } catch {
-      show('No pudimos actualizar tu contraseña. Intenta nuevamente.', 'error');
+    } catch (error) {
+      if (isFirebaseNetworkError(error)) {
+        show(MESSAGES.NETWORK_ERROR, 'error');
+      } else {
+        show(
+          firebaseConfigured
+            ? 'No pudimos enviar el correo de recuperación. Inténtalo nuevamente.'
+            : 'No pudimos actualizar tu contraseña. Intenta nuevamente.',
+          'error',
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }

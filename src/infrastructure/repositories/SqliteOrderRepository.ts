@@ -3,6 +3,7 @@ import type { IOrderRepository, NewOrderInput, OrderUpdate } from '@/domain/repo
 import { getDatabase, withDatabaseTransaction } from '@/infrastructure/data/sqliteDatabase';
 import { generateId } from '@/shared/utils/generateId';
 import { getOrdersFromFirebase } from '@/infrastructure/data/firebaseDataSync';
+import { invalidateProductCatalogCache } from './SqliteProductRepository';
 
 type OrderRow = {
   id: string;
@@ -140,7 +141,9 @@ export class SqliteOrderRepository implements IOrderRepository {
 
   async checkout(input: NewOrderInput) {
     validateInput(input);
-    return this.persist(input);
+    const order = await this.persist(input);
+    invalidateProductCatalogCache();
+    return order;
   }
 
   async update(orderId: string, userId: string, changes: OrderUpdate) {
@@ -211,6 +214,7 @@ export class SqliteOrderRepository implements IOrderRepository {
         userId,
       );
     });
+    invalidateProductCatalogCache();
     const cancelled = (await this.list(userId)).find((candidate) => candidate.id === orderId);
     if (!cancelled) throw new Error('No se pudo recuperar el pedido cancelado.');
     return cancelled;
@@ -429,6 +433,7 @@ export class SqliteOrderRepository implements IOrderRepository {
         );
       }
     });
+    invalidateProductCatalogCache();
   }
 }
 

@@ -13,6 +13,7 @@ import {
   RegisterFormValues,
 } from '@/presentation/state/registerFormReducer';
 import { MESSAGES } from '@/shared/constants/messages';
+import { isFirebaseNetworkError } from '@/infrastructure/data/firebaseDataSync';
 import {
   validateConfirmPassword,
   validateEmail,
@@ -84,6 +85,8 @@ export function useRegisterForm(defaultCountry: Country) {
     } catch (error) {
       if (error instanceof EmailAlreadyRegisteredError) {
         dispatch({ type: 'SET_ERRORS', errors: { email: MESSAGES.EMAIL_TAKEN } });
+      } else if (isFirebaseNetworkError(error)) {
+        show(MESSAGES.NETWORK_ERROR, 'error');
       } else {
         show(MESSAGES.REGISTER_GENERIC_ERROR, 'error');
       }

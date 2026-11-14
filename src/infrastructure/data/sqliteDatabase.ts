@@ -101,6 +101,10 @@ CREATE TABLE IF NOT EXISTS product_reviews (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
   review_text TEXT,
+  sync_status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (sync_status IN ('pending', 'synced', 'error')),
+  sync_error TEXT,
+  is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1)),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   UNIQUE (product_id, user_id)
 );
@@ -217,6 +221,20 @@ export function getDatabase(): Promise<SQLite.SQLiteDatabase> {
           //noinspection SqlNoDataSourceInspection
           await database.execAsync('ALTER TABLE products ADD COLUMN stock_base_quantity INTEGER');
           await database.runAsync('UPDATE products SET stock_base_quantity = stock_quantity WHERE stock_base_quantity IS NULL');
+        }
+        const reviewColumns = await database.getAllAsync<{ name: string }>('PRAGMA table_info(product_reviews)');
+        const existingReviewColumns = new Set(reviewColumns.map((column) => column.name));
+        if (!existingReviewColumns.has('sync_status')) {
+          //noinspection SqlNoDataSourceInspection
+          await database.execAsync("ALTER TABLE product_reviews ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending' CHECK (sync_status IN ('pending', 'synced', 'error'))");
+        }
+        if (!existingReviewColumns.has('sync_error')) {
+          //noinspection SqlNoDataSourceInspection
+          await database.execAsync('ALTER TABLE product_reviews ADD COLUMN sync_error TEXT');
+        }
+        if (!existingReviewColumns.has('is_deleted')) {
+          //noinspection SqlNoDataSourceInspection
+          await database.execAsync('ALTER TABLE product_reviews ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1))');
         }
         await withDatabaseTransaction(database, async () => {
           await database.runAsync("DELETE FROM orders WHERE user_id = 'demo-user'");

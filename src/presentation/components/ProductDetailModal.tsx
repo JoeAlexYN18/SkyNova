@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Product, ProductCategory, ProductReview } from '@/domain/entities/Product';
 import { colors, radius, spacing } from '@/shared/theme';
@@ -7,6 +7,7 @@ import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { productRepository } from '@/infrastructure/container';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
+import { useNetworkStatus } from '@/presentation/hooks/useNetworkStatus';
 
 interface Props {
   product: Product | null;
@@ -24,6 +25,9 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
   const [rating, setRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [isDeletingReview, setIsDeletingReview] = useState(false);
+  const previousOwnSync = useRef<{ productId?: string; sync?: string }>({});
+  const isOnline = useNetworkStatus();
   const { currentUser } = useAuth();
   const { show } = useToast();
   const productId = product?.id;
@@ -31,15 +35,18 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
   useEffect(() => {
     if (!productId) return;
     let active = true;
-    productRepository.listReviews(productId, (error) => {
-      show(error instanceof Error
-        ? `Reseñas locales cargadas; no se pudieron sincronizar: ${error.message}`
-        : 'No se pudieron sincronizar las reseñas con Firebase.', 'error');
+    productRepository.listReviews(productId, () => {
+      show('No se pudieron actualizar las reseñas; se muestran las guardadas en este dispositivo.', 'info');
     }).then((result) => {
       if (!active) return;
       setReviews(result);
       setReviewsLoaded(true);
       const ownReview = result.find((review) => review.userId === currentUser?.id);
+      const previous = previousOwnSync.current;
+      if (previous.productId === productId && previous.sync && previous.sync !== 'synced' && ownReview?.syncStatus === 'synced') {
+        show('Tu reseña ya está publicada.', 'success');
+      }
+      previousOwnSync.current = { productId, sync: ownReview?.syncStatus };
       setRating(ownReview?.rating ?? 0);
       setReviewText(ownReview?.reviewText ?? '');
     }).catch(() => {
@@ -50,7 +57,28 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
       }
     });
     return () => { active = false; };
-  }, [productId, currentUser?.id, show]);
+  }, [productId, currentUser?.id, isOnline, show]);
+
+  const ownReview = reviews.find((review) => review.userId === currentUser?.id);
+  const sortedReviews = useMemo(() => {
+    if (!currentUser) return reviews;
+    return [...reviews].sort((left, right) =>
+      Number(right.userId === currentUser.id) - Number(left.userId === currentUser.id),
+    );
+  }, [reviews, currentUser]);
+  const ratingHistogram = useMemo(() => {
+    const counts = [0, 0, 0, 0, 0, 0];
+    reviews.forEach((review) => {
+      if (review.rating >= 1 && review.rating <= 5) counts[review.rating] += 1;
+    });
+    const max = Math.max(...counts.slice(1), 1);
+    return ([5, 4, 3, 2, 1] as const).map((star) => ({
+      star,
+      count: counts[star],
+      ratio: counts[star] / max,
+    }));
+  }, [reviews]);
+
   if (!product) return null;
 
   const category = categories.find((item) => item.id === product.categoryId);
@@ -89,12 +117,49 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
         reviewText: reviewText.trim() || undefined,
       });
       setReviews((previous) => [saved, ...previous.filter((review) => review.userId !== saved.userId)]);
-      show('Tu reseña se guardó correctamente.', 'success');
+      show(
+        saved.syncStatus === 'synced'
+          ? 'Tu reseña se publicó correctamente.'
+          : saved.syncStatus === 'error'
+            ? 'Tu reseña se guardó en este dispositivo; reintentaremos publicarla automáticamente.'
+            : 'Tu reseña se guardó en este dispositivo; se publicará cuando recuperes la conexión.',
+        'success',
+      );
     } catch (error) {
       show(error instanceof Error ? error.message : 'No se pudo guardar la reseña.', 'error');
     } finally {
       setIsSubmittingReview(false);
     }
+  };
+
+  const confirmDeleteReview = () => {
+    if (!product || !currentUser || !ownReview || isDeletingReview) return;
+    Alert.alert('¿Eliminar tu reseña?', 'Tu calificación dejará de ser visible para otros usuarios.', [
+      { text: 'Volver', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: () => {
+          setIsDeletingReview(true);
+          void productRepository.deleteReview(product.id, currentUser.id)
+            .then((outcome) => {
+              setReviews((previous) => previous.filter((review) => review.userId !== currentUser.id));
+              setRating(0);
+              setReviewText('');
+              show(
+                outcome === 'synced'
+                  ? 'Tu reseña se eliminó.'
+                  : outcome === 'error'
+                    ? 'Tu reseña se eliminará; reintentaremos confirmar el cambio automáticamente.'
+                    : 'Tu reseña se eliminará de este dispositivo; se confirmará al recuperar la conexión.',
+                'success',
+              );
+            })
+            .catch((error: unknown) => show(error instanceof Error ? error.message : 'No se pudo eliminar la reseña.', 'error'))
+            .finally(() => setIsDeletingReview(false));
+        },
+      },
+    ]);
   };
 
   return (
@@ -166,6 +231,32 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
             </View>
             <View style={styles.reviewsSection}>
               <Text style={styles.sectionTitle}>Calificaciones y reseñas</Text>
+              {reviewsLoaded && reviews.length > 0 && averageRating !== undefined && (
+                <View style={styles.ratingSummary}>
+                  <View style={styles.ratingSummaryLeft}>
+                    <Text style={styles.ratingSummaryAverage}>{averageRating.toFixed(1)}</Text>
+                    <View>
+                      <View style={styles.reviewStarsDisplay}>
+                        {Array.from({ length: 5 }, (_, index) => (
+                          <MaterialCommunityIcons key={index} name={index < Math.round(averageRating) ? 'star' : 'star-outline'} size={15} color="#FBBF24" />
+                        ))}
+                      </View>
+                      <Text style={styles.ratingCount}>({reviewCount} valoraciones)</Text>
+                    </View>
+                  </View>
+                  <View style={styles.histogram}>
+                    {ratingHistogram.map(({ star, count, ratio }) => (
+                      <View key={star} style={styles.histogramRow}>
+                        <Text style={styles.histogramStar}>{star} ★</Text>
+                        <View style={styles.histogramTrack}>
+                          <View style={[styles.histogramFill, { width: `${Math.round(ratio * 100)}%` }]} />
+                        </View>
+                        <Text style={styles.histogramCount}>{count}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
               <Text style={styles.reviewPrompt}>
                 {currentUser ? 'Comparte tu experiencia con este producto.' : 'Inicia sesión para compartir tu experiencia.'}
               </Text>
@@ -208,10 +299,34 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
                     {reviews.some((review) => review.userId === currentUser?.id) ? 'Actualizar mi reseña' : 'Publicar reseña'}
                   </Text>}
               </TouchableOpacity>
+              {currentUser && ownReview && ownReview.syncStatus !== 'synced' && (
+                <Text style={styles.reviewPendingNote}>
+                  {ownReview.syncStatus === 'error'
+                    ? 'Tu reseña está guardada en este dispositivo; reintentaremos publicarla automáticamente.'
+                    : 'Tu reseña está pendiente de publicación y se sincronizará automáticamente.'}
+                </Text>
+              )}
               {!reviewsLoaded
                 ? <ActivityIndicator style={styles.reviewsLoading} color={colors.primary} />
-                : reviews.length
-                  ? reviews.map((review) => <ReviewRow key={review.id} review={review} />)
+                : sortedReviews.length
+                  ? sortedReviews.map((review) => (
+                    <View key={review.id}>
+                      {review.userId === currentUser?.id && <Text style={styles.ownReviewTag}>Tu reseña</Text>}
+                      <ReviewRow review={review} />
+                      {review.userId === currentUser?.id && (
+                        <TouchableOpacity
+                          onPress={confirmDeleteReview}
+                          disabled={isDeletingReview || isSubmittingReview}
+                          style={styles.deleteReviewButton}
+                          accessibilityRole="button"
+                        >
+                          {isDeletingReview
+                            ? <ActivityIndicator size="small" color={colors.danger} />
+                            : <Text style={styles.deleteReviewText}>Eliminar mi reseña</Text>}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))
                   : <Text style={styles.noReviews}>Sé la primera persona en calificar este producto.</Text>}
             </View>
             <Text style={styles.taxonomyNote}>Precio en {product.currency}. Disponibilidad sujeta a cambios.</Text>
@@ -303,6 +418,19 @@ const styles = StyleSheet.create({
   reviewSubmit: { minHeight: 42, borderRadius: radius.round, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, marginTop: spacing.sm },
   reviewSubmitDisabled: { opacity: 0.55 },
   reviewSubmitText: { color: colors.onPrimary, fontSize: 12, fontWeight: '800' },
+  reviewPendingNote: { color: colors.warning, fontSize: 11, lineHeight: 16, marginTop: spacing.sm, fontWeight: '600' },
+  ratingSummary: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  ratingSummaryLeft: { alignItems: 'center', justifyContent: 'center', minWidth: 72 },
+  ratingSummaryAverage: { color: colors.textPrimary, fontSize: 30, fontWeight: '900' },
+  histogram: { flex: 1, justifyContent: 'center', gap: 4 },
+  histogramRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  histogramStar: { color: colors.textSecondary, fontSize: 10, fontWeight: '700', width: 22 },
+  histogramTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  histogramFill: { height: '100%', borderRadius: 3, backgroundColor: '#FBBF24' },
+  histogramCount: { color: colors.textMuted, fontSize: 10, fontWeight: '700', width: 18, textAlign: 'right' },
+  ownReviewTag: { color: colors.primary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase', marginTop: spacing.sm, marginBottom: 2 },
+  deleteReviewButton: { alignSelf: 'flex-start', paddingVertical: spacing.xs, marginTop: spacing.xs },
+  deleteReviewText: { color: colors.danger, fontSize: 11, fontWeight: '800' },
   reviewsLoading: { marginTop: spacing.lg },
   noReviews: { color: colors.textMuted, fontSize: 12, textAlign: 'center', paddingVertical: spacing.md },
   reviewCard: { borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: spacing.md },

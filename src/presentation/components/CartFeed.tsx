@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import * as Network from 'expo-network';
 import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useCart } from '@/infrastructure/context/CartContext';
@@ -11,6 +12,7 @@ import type { CheckoutInput, Order, OrderPaymentDetails, PaymentMethod } from '@
 import type { Country } from '@/domain/entities/Country';
 import type { Product } from '@/domain/entities/Product';
 import { COUNTRIES } from '@/infrastructure/data/countries';
+import { useNetworkStatus } from '@/presentation/hooks/useNetworkStatus';
 import { colors } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import {
@@ -37,6 +39,8 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
   const { show } = useToast();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const [completedOffline, setCompletedOffline] = useState(false);
+  const isOnline = useNetworkStatus();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
@@ -218,6 +222,8 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
     submitLock.current = true;
     setIsSubmitting(true);
     try {
+      const networkState = await Network.getNetworkStateAsync().catch(() => null);
+      const offlinePurchase = !!networkState && !(networkState.isConnected && networkState.isInternetReachable !== false);
       const order = await checkoutOrder(currentUser, lines, {
         ...address,
         phone: `${selectedCountry.dialCode} ${address.phone.trim()}`,
@@ -228,6 +234,7 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
       setCardNumber('');
       setCardExpiry('');
       setCardCvv('');
+      setCompletedOffline(offlinePurchase);
       setCompletedOrder(order);
     } catch (error) {
       show(error instanceof Error ? error.message : 'No se pudo crear el pedido.', 'error');
@@ -285,8 +292,13 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
           <View style={styles.orderCompleteIcon}>
             <MaterialCommunityIcons name="check" size={32} color={colors.onPrimary} />
           </View>
-          <Text style={styles.orderCompleteTitle}>¡Pago confirmado!</Text>
+          <Text style={styles.orderCompleteTitle}>{completedOffline ? '¡Pedido registrado!' : '¡Pago confirmado!'}</Text>
           <Text style={styles.orderCompleteNumber}>Pedido #{completedOrder.id.slice(-8).toUpperCase()}</Text>
+          {completedOffline && (
+            <Text style={styles.orderCompleteOfflineNote}>
+              Pendiente de confirmación: se sincronizará automáticamente cuando recuperes la conexión.
+            </Text>
+          )}
           <Text style={styles.orderCompleteMessage}>
             {completedUnits} {completedUnits === 1 ? 'artículo' : 'artículos'} · {formatCurrency(
               completedOrder.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
@@ -384,6 +396,14 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
               <Text style={styles.checkoutSummaryTotalValue}>{formatCurrency(subtotal, currency)}</Text>
             </View>
           </View>
+          {!isOnline && (
+            <View style={styles.checkoutOfflineNotice}>
+              <MaterialCommunityIcons name="cloud-off-outline" size={17} color={colors.warning} />
+              <Text style={styles.checkoutOfflineNoticeText}>
+                Estás sin conexión. Tu pedido se guardará en el dispositivo y se confirmará automáticamente cuando recuperes internet.
+              </Text>
+            </View>
+          )}
           <View style={styles.checkoutField}>
             <Text style={styles.checkoutLabel}>País</Text>
             <TouchableOpacity

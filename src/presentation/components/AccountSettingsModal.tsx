@@ -17,6 +17,7 @@ import type { Country } from '@/domain/entities/Country';
 import type { UpdateUserProfileInput, User } from '@/domain/entities/User';
 import { EmailAlreadyRegisteredError } from '@/domain/errors/UserErrors';
 import { COUNTRIES } from '@/infrastructure/data/countries';
+import { hasNetworkConnection, isFirebaseNetworkError } from '@/infrastructure/data/firebaseDataSync';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { CountryPickerModal } from '@/presentation/components/CountryPickerModal';
 import { PasswordField } from '@/presentation/components/PasswordField';
@@ -98,6 +99,10 @@ export function AccountSettingsModal({
       show('Revisa los campos marcados antes de guardar.', 'error');
       return;
     }
+    if (!(await hasNetworkConnection())) {
+      show('Necesitas conexión a internet para actualizar tu cuenta.', 'error');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -119,7 +124,7 @@ export function AccountSettingsModal({
         setErrors((current) => ({ ...current, email: error.message }));
         show(error.message, 'error');
       } else {
-        show(error instanceof Error ? error.message : 'No se pudo actualizar tu información.', 'error');
+        show(profileUpdateErrorMessage(error), 'error');
       }
     } finally {
       setIsSubmitting(false);
@@ -130,6 +135,12 @@ export function AccountSettingsModal({
     if (isSubmitting || isDeletingAccount) return;
     if (!deletePassword) {
       setDeleteError('Ingresa tu contraseña para confirmar la eliminación.');
+      return;
+    }
+    if (!(await hasNetworkConnection())) {
+      const message = 'Se necesita conexión a internet para eliminar la cuenta.';
+      setDeleteError(message);
+      show(message, 'error');
       return;
     }
     setDeleteError(null);
@@ -297,10 +308,37 @@ export function AccountSettingsModal({
   );
 }
 
-function accountDeletionErrorMessage(error: unknown) {
-  const code = error instanceof Error && 'code' in error && typeof error.code === 'string'
+function firebaseErrorCode(error: unknown) {
+  return error instanceof Error && 'code' in error && typeof error.code === 'string'
     ? error.code
     : '';
+}
+
+function profileUpdateErrorMessage(error: unknown) {
+  const code = firebaseErrorCode(error);
+  if (isFirebaseNetworkError(error)) {
+    return 'No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.';
+  }
+  if (code === 'auth/wrong-password' || code === 'auth/invalid-credential' || code === 'auth/user-not-found') {
+    return 'La contraseña actual no es correcta.';
+  }
+  if (code === 'auth/requires-recent-login') {
+    return 'Por seguridad, vuelve a iniciar sesión y repite el cambio.';
+  }
+  if (code === 'auth/email-already-in-use') {
+    return 'Ya existe una cuenta registrada con este correo.';
+  }
+  if (code === 'auth/weak-password') {
+    return 'La nueva contraseña es muy débil.';
+  }
+  return 'No se pudo actualizar tu información. Inténtalo nuevamente.';
+}
+
+function accountDeletionErrorMessage(error: unknown) {
+  if (isFirebaseNetworkError(error)) {
+    return 'No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.';
+  }
+  const code = firebaseErrorCode(error);
   if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
     return 'La contraseña no es correcta. Verifícala e inténtalo de nuevo.';
   }
@@ -310,7 +348,7 @@ function accountDeletionErrorMessage(error: unknown) {
   if (code === 'permission-denied' || code === 'storage/unauthorized') {
     return 'Firebase rechazó la eliminación. Publica las reglas actualizadas de Firestore y Storage e inténtalo de nuevo.';
   }
-  return error instanceof Error ? error.message : 'No se pudo eliminar tu cuenta. Inténtalo nuevamente.';
+  return 'No se pudo eliminar tu cuenta. Inténtalo nuevamente.';
 }
 
 function createValues(user: User): FormValues {

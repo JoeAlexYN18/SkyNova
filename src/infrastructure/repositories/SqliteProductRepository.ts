@@ -1,12 +1,16 @@
-import type { IProductRepository, ProductQuery } from '@/domain/repositories/IProductRepository';
+import type * as SQLite from 'expo-sqlite';
+import type { IProductRepository, ProductQuery, UserReviewItem } from '@/domain/repositories/IProductRepository';
 import type { Product, ProductCategory, ProductImage, ProductReview } from '@/domain/entities/Product';
 import { mergeCatalogBrands } from '@/shared/data/brands';
 import { getDatabase, withDatabaseTransaction } from '@/infrastructure/data/sqliteDatabase';
 import { generateId } from '@/shared/utils/generateId';
 import {
+  deleteReviewFromFirebase,
   getAllProductReviewsFromFirebase,
   getCatalogFromFirebase,
   getProductReviewsFromFirebase,
+  getUserReviewsFromFirebase,
+  hasNetworkConnection,
   syncReviewToFirebase,
 } from '@/infrastructure/data/firebaseDataSync';
 import { getCatalogFromRest, restApiConfigured } from '@/infrastructure/data/restApiClient';
@@ -286,6 +290,11 @@ const products: Product[] = [
 const categoryIcons: Record<string, string> = Object.fromEntries(categories.map(({ id, icon }) => [id, icon]));
 let catalogSeedPromise: Promise<void> | undefined;
 let catalogSyncPromise: Promise<boolean> | undefined;
+let catalogCachePromise: Promise<{ categories: ProductCategory[]; products: Product[] }> | undefined;
+
+export function invalidateProductCatalogCache() {
+  catalogCachePromise = undefined;
+}
 
 export class SqliteProductRepository implements IProductRepository {
   async syncCatalog() {
@@ -382,44 +391,19 @@ export class SqliteProductRepository implements IProductRepository {
     } catch (error) {
       onSyncError?.(error);
     }
-    for (const review of cloudReviews) {
-      await database.runAsync(
-        `INSERT INTO users (id, full_name, email, phone_country, phone_dial_code, phone_number)
-         VALUES (?, ?, ?, 'ZZ', '+0', '0000')
-         ON CONFLICT(id) DO UPDATE SET full_name = excluded.full_name, updated_at = ?`,
-        review.userId,
-        review.reviewerName,
-        `${review.userId}@local.skynova.invalid`,
-        review.createdAt,
-      );
-      await database.runAsync(
-        `INSERT INTO product_reviews (id, product_id, user_id, rating, review_text, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(product_id, user_id) DO UPDATE SET
-           rating = excluded.rating, review_text = excluded.review_text, created_at = excluded.created_at`,
-        review.id,
-        review.productId,
-        review.userId,
-        review.rating,
-        review.reviewText ?? null,
-        review.createdAt,
-      );
+    await this.cacheCloudReviews(database, cloudReviews);
+    let pushedReviews = 0;
+    if (await hasNetworkConnection()) {
+      pushedReviews = await this.pushPendingReviews(database, productId, onSyncError);
     }
+    if (cloudReviews.length > 0 || pushedReviews > 0) invalidateProductCatalogCache();
     const rows = await database.getAllAsync<ReviewRow>(
-      `SELECT r.id, r.product_id, r.user_id, u.full_name, r.rating, r.review_text, r.created_at
+      `SELECT r.id, r.product_id, r.user_id, u.full_name, r.rating, r.review_text, r.sync_status, r.sync_error, r.is_deleted, r.created_at
        FROM product_reviews r JOIN users u ON u.id = r.user_id
-       WHERE r.product_id = ? ORDER BY r.created_at DESC`,
+       WHERE r.product_id = ? AND r.is_deleted = 0 ORDER BY r.created_at DESC`,
       productId,
     );
-    return rows.map((row) => ({
-      id: row.id,
-      productId: row.product_id,
-      userId: row.user_id,
-      reviewerName: row.full_name,
-      rating: row.rating,
-      reviewText: row.review_text ?? undefined,
-      createdAt: row.created_at,
-    }));
+    return rows.map(mapReviewRow);
   }
 
   async saveReview(input: Omit<ProductReview, 'id' | 'createdAt' | 'reviewerName'> & { reviewerName: string }): Promise<ProductReview> {
@@ -436,10 +420,11 @@ export class SqliteProductRepository implements IProductRepository {
       now,
     );
     await database.runAsync(
-      `INSERT INTO product_reviews (id, product_id, user_id, rating, review_text, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO product_reviews (id, product_id, user_id, rating, review_text, sync_status, sync_error, created_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?)
        ON CONFLICT(product_id, user_id) DO UPDATE SET
-         rating = excluded.rating, review_text = excluded.review_text, created_at = excluded.created_at`,
+         rating = excluded.rating, review_text = excluded.review_text,
+         sync_status = 'pending', sync_error = NULL, is_deleted = 0, created_at = excluded.created_at`,
       reviewId,
       input.productId,
       input.userId,
@@ -447,20 +432,212 @@ export class SqliteProductRepository implements IProductRepository {
       input.reviewText?.trim() || null,
       now,
     );
-    await syncReviewToFirebase({
-      ...input,
-      id: reviewId,
-      createdAt: now,
-      reviewerName: input.reviewerName,
-      reviewText: input.reviewText?.trim() || undefined,
-    });
+    if (await hasNetworkConnection()) {
+      try {
+        await syncReviewToFirebase({
+          ...input,
+          id: reviewId,
+          createdAt: now,
+          reviewerName: input.reviewerName,
+          reviewText: input.reviewText?.trim() || undefined,
+        });
+        await database.runAsync(
+          "UPDATE product_reviews SET sync_status = 'synced', sync_error = NULL WHERE product_id = ? AND user_id = ?",
+          input.productId,
+          input.userId,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo publicar la reseña.';
+        await database.runAsync(
+          "UPDATE product_reviews SET sync_status = 'error', sync_error = ? WHERE product_id = ? AND user_id = ?",
+          message.slice(0, 500),
+          input.productId,
+          input.userId,
+        );
+      }
+    }
     const rows = await this.listReviews(input.productId);
     const saved = rows.find((review) => review.userId === input.userId);
     if (!saved) throw new Error('No se pudo recuperar la calificación guardada.');
+    invalidateProductCatalogCache();
     return saved;
   }
 
+  async deleteReview(productId: string, userId: string): Promise<'synced' | 'pending' | 'error'> {
+    const database = await getDatabase();
+    const existing = await database.getFirstAsync<{ is_deleted: number; sync_status: string }>(
+      'SELECT is_deleted, sync_status FROM product_reviews WHERE product_id = ? AND user_id = ?',
+      productId,
+      userId,
+    );
+    if (!existing || existing.is_deleted) {
+      return existing?.is_deleted ? (existing.sync_status === 'error' ? 'error' : 'pending') : 'synced';
+    }
+    await database.runAsync(
+      "UPDATE product_reviews SET is_deleted = 1, sync_status = 'pending', sync_error = NULL, created_at = ? WHERE product_id = ? AND user_id = ?",
+      new Date().toISOString(),
+      productId,
+      userId,
+    );
+    if (!(await hasNetworkConnection())) return 'pending';
+    try {
+      await deleteReviewFromFirebase(productId, userId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo eliminar la reseña.';
+      await database.runAsync(
+        "UPDATE product_reviews SET sync_status = 'error', sync_error = ? WHERE product_id = ? AND user_id = ?",
+        message.slice(0, 500),
+        productId,
+        userId,
+      );
+      return 'error';
+    }
+    await database.runAsync(
+      'DELETE FROM product_reviews WHERE product_id = ? AND user_id = ?',
+      productId,
+      userId,
+    );
+    invalidateProductCatalogCache();
+    return 'synced';
+  }
+
+  async syncPendingReviews(onSyncError?: (error: unknown) => void): Promise<number> {
+    if (!(await hasNetworkConnection())) return 0;
+    const database = await getDatabase();
+    const pushed = await this.pushPendingReviews(database, undefined, onSyncError);
+    if (pushed > 0) invalidateProductCatalogCache();
+    return pushed;
+  }
+
+  async listUserReviews(userId: string, onSyncError?: (error: unknown) => void): Promise<UserReviewItem[]> {
+    const database = await getDatabase();
+    let cloudReviews: ProductReview[] = [];
+    try {
+      cloudReviews = await getUserReviewsFromFirebase(userId);
+    } catch (error) {
+      onSyncError?.(error);
+    }
+    await this.cacheCloudReviews(database, cloudReviews);
+    if (await hasNetworkConnection()) {
+      const pushed = await this.pushPendingReviews(database, undefined, onSyncError);
+      if (pushed > 0) invalidateProductCatalogCache();
+    }
+    const rows = await database.getAllAsync<UserReviewRow>(
+      `SELECT r.id, r.product_id, r.user_id, u.full_name, r.rating, r.review_text, r.sync_status, r.sync_error, r.is_deleted, r.created_at,
+         p.name AS product_name, p.price AS product_price, p.currency AS product_currency,
+         (SELECT i.image_url FROM product_images i
+          WHERE i.product_id = r.product_id AND i.is_primary = 1 LIMIT 1) AS product_image_url
+       FROM product_reviews r
+       JOIN users u ON u.id = r.user_id
+       LEFT JOIN products p ON p.id = r.product_id
+       WHERE r.user_id = ? AND r.is_deleted = 0
+       ORDER BY r.created_at DESC`,
+      userId,
+    );
+    return rows.map((row) => ({
+      ...mapReviewRow(row),
+      productName: row.product_name ?? 'Producto',
+      productImageUrl: row.product_image_url ?? undefined,
+      productPrice: row.product_price ?? undefined,
+      productCurrency: row.product_currency ?? undefined,
+    }));
+  }
+
+  private async cacheCloudReviews(database: SQLite.SQLiteDatabase, cloudReviews: ProductReview[]) {
+    for (const review of cloudReviews) {
+      await database.runAsync(
+        `INSERT INTO users (id, full_name, email, phone_country, phone_dial_code, phone_number)
+         VALUES (?, ?, ?, 'ZZ', '+0', '0000')
+         ON CONFLICT(id) DO UPDATE SET full_name = excluded.full_name, updated_at = ?`,
+        review.userId,
+        review.reviewerName,
+        `${review.userId}@local.skynova.invalid`,
+        review.createdAt,
+      );
+      await database.runAsync(
+        `INSERT INTO product_reviews (id, product_id, user_id, rating, review_text, sync_status, sync_error, created_at)
+         VALUES (?, ?, ?, ?, ?, 'synced', NULL, ?)
+         ON CONFLICT(product_id, user_id) DO UPDATE SET
+           rating = excluded.rating, review_text = excluded.review_text,
+           sync_status = 'synced', sync_error = NULL, created_at = excluded.created_at
+         WHERE product_reviews.is_deleted = 0 AND product_reviews.sync_status = 'synced'`,
+        review.id,
+        review.productId,
+        review.userId,
+        review.rating,
+        review.reviewText ?? null,
+        review.createdAt,
+      );
+    }
+  }
+
+  private async pushPendingReviews(
+    database: SQLite.SQLiteDatabase,
+    productId: string | undefined,
+    onSyncError?: (error: unknown) => void,
+  ): Promise<number> {
+    const rows = await database.getAllAsync<ReviewRow>(
+      `SELECT r.id, r.product_id, r.user_id, u.full_name, r.rating, r.review_text, r.sync_status, r.sync_error, r.is_deleted, r.created_at
+       FROM product_reviews r JOIN users u ON u.id = r.user_id
+       WHERE (r.sync_status != 'synced' OR r.is_deleted = 1) ${productId ? 'AND r.product_id = ?' : ''}
+       ORDER BY r.created_at ASC`,
+      ...(productId ? [productId] : []),
+    );
+    let firstError: unknown;
+    let syncedCount = 0;
+    for (const row of rows) {
+      if (row.is_deleted) {
+        try {
+          await deleteReviewFromFirebase(row.product_id, row.user_id);
+          await database.runAsync(
+            'DELETE FROM product_reviews WHERE id = ?',
+            row.id,
+          );
+          syncedCount += 1;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'No se pudo eliminar la reseña.';
+          await database.runAsync(
+            "UPDATE product_reviews SET sync_status = 'error', sync_error = ? WHERE id = ?",
+            message.slice(0, 500),
+            row.id,
+          );
+          firstError ??= error;
+        }
+        continue;
+      }
+      const review = mapReviewRow(row);
+      try {
+        await syncReviewToFirebase(review);
+        await database.runAsync(
+          "UPDATE product_reviews SET sync_status = 'synced', sync_error = NULL WHERE id = ?",
+          row.id,
+        );
+        syncedCount += 1;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo publicar la reseña.';
+        await database.runAsync(
+          "UPDATE product_reviews SET sync_status = 'error', sync_error = ? WHERE id = ?",
+          message.slice(0, 500),
+          row.id,
+        );
+        firstError ??= error;
+      }
+    }
+    if (firstError !== undefined) onSyncError?.(firstError);
+    return syncedCount;
+  }
+
   private async loadCatalog() {
+    if (!catalogCachePromise) {
+      catalogCachePromise = this.loadCatalogUncached().catch((error: unknown) => {
+        catalogCachePromise = undefined;
+        throw error;
+      });
+    }
+    return catalogCachePromise;
+  }
+
+  private async loadCatalogUncached() {
     await this.ensureCatalogSeeded();
     const database = await getDatabase();
     const categoryRows = await database.getAllAsync<CategoryRow>('SELECT * FROM categories ORDER BY name');
@@ -688,10 +865,12 @@ export class SqliteProductRepository implements IProductRepository {
           now,
         );
         await database.runAsync(
-          `INSERT INTO product_reviews (id, product_id, user_id, rating, review_text, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)
+          `INSERT INTO product_reviews (id, product_id, user_id, rating, review_text, sync_status, sync_error, created_at)
+           VALUES (?, ?, ?, ?, ?, 'synced', NULL, ?)
            ON CONFLICT(product_id, user_id) DO UPDATE SET
-             rating = excluded.rating, review_text = excluded.review_text, created_at = excluded.created_at`,
+             rating = excluded.rating, review_text = excluded.review_text,
+             sync_status = 'synced', sync_error = NULL, created_at = excluded.created_at
+           WHERE product_reviews.is_deleted = 0 AND product_reviews.sync_status = 'synced'`,
           review.id,
           review.productId,
           review.userId,
@@ -701,6 +880,7 @@ export class SqliteProductRepository implements IProductRepository {
         );
       }
     });
+    invalidateProductCatalogCache();
     return true;
   }
 
@@ -810,8 +990,31 @@ type ReviewRow = {
   full_name: string;
   rating: number;
   review_text: string | null;
+  sync_status: 'pending' | 'synced' | 'error';
+  sync_error: string | null;
+  is_deleted: number;
   created_at: string;
 };
+
+type UserReviewRow = ReviewRow & {
+  product_name: string | null;
+  product_price: number | null;
+  product_currency: string | null;
+  product_image_url: string | null;
+};
+
+function mapReviewRow(row: ReviewRow): ProductReview {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    userId: row.user_id,
+    reviewerName: row.full_name,
+    rating: row.rating,
+    reviewText: row.review_text ?? undefined,
+    createdAt: row.created_at,
+    syncStatus: row.sync_status,
+  };
+}
 
 function categoryIconFor(type: Product['productType']) {
   if (type === 'drone') return 'quadcopter';
@@ -923,7 +1126,7 @@ function scoreSearchMatch(
 }
 
 function cloneProduct(product: Product): Product {
-  return { ...product };
+  return product.images ? { ...product, images: product.images.map((image) => ({ ...image })) } : { ...product };
 }
 
 function interleaveRelevantProducts(productsToRank: Product[]) {

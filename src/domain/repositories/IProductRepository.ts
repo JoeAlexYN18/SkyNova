@@ -28,6 +28,13 @@ export interface HomeProductCollections {
   bestSellingAccessories: Product[];
 }
 
+export interface UserReviewItem extends ProductReview {
+  productName: string;
+  productImageUrl?: string;
+  productPrice?: number;
+  productCurrency?: string;
+}
+
 
 export interface IProductRepository {
   syncCatalog(): Promise<boolean>;
@@ -37,5 +44,8 @@ export interface IProductRepository {
   searchSuggestions(query: string, limit?: number): Promise<Product[]>;
   listProducts(query?: ProductQuery): Promise<ProductPage>;
   listReviews(productId: string, onSyncError?: (error: unknown) => void): Promise<ProductReview[]>;
+  listUserReviews(userId: string, onSyncError?: (error: unknown) => void): Promise<UserReviewItem[]>;
   saveReview(input: Omit<ProductReview, 'id' | 'createdAt' | 'reviewerName'> & { reviewerName: string }): Promise<ProductReview>;
+  deleteReview(productId: string, userId: string): Promise<'synced' | 'pending' | 'error'>;
+  syncPendingReviews(onSyncError?: (error: unknown) => void): Promise<number>;
 }

@@ -7,6 +7,7 @@ import { authenticateUser } from '@/domain/usecases/AuthenticateUserUseCase';
 import { registerUser } from '@/domain/usecases/RegisterUserUseCase';
 import { userRepository } from '../container';
 import { cacheUserProfile, deleteLocalAccountData } from '../data/sqliteDatabase';
+import { invalidateProductCatalogCache } from '../repositories/SqliteProductRepository';
 import { useToast } from './ToastContext';
 
 interface AuthContextValue {
@@ -79,6 +80,7 @@ export function AuthProvider({ children, repository = userRepository }: AuthProv
     await repository.deleteAccount(userId, password);
     try {
       await deleteLocalAccountData(userId);
+      invalidateProductCatalogCache();
     } catch (error) {
       setCurrentUser(null);
       const reason = error instanceof Error ? ` ${error.message}` : '';

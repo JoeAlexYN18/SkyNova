@@ -28,7 +28,8 @@ import { deleteObject, ref } from 'firebase/storage';
 import type { NewUserInput, UpdateUserProfileInput, User } from '@/domain/entities/User';
 import type { AuthenticationResult, IUserRepository } from '@/domain/repositories/IUserRepository';
 import { EmailAlreadyRegisteredError } from '@/domain/errors/UserErrors';
-import { cacheUserProfile } from '@/infrastructure/data/sqliteDatabase';
+import { cacheUserProfile, getCachedUserProfile } from '@/infrastructure/data/sqliteDatabase';
+import { hasNetworkConnection, isFirebaseNetworkError } from '@/infrastructure/data/firebaseDataSync';
 import {
   firebaseStorageConfigured,
   getFirebaseAuth,
@@ -282,12 +283,29 @@ export class FirebaseUserRepository implements IUserRepository {
           onChange(null);
           return;
         }
-        void this.getProfile(firebaseUser.uid)
-          .then((user) => {
+        void (async () => {
+          try {
+            if (!(await hasNetworkConnection())) {
+              const cached = await getCachedUserProfile(firebaseUser.uid);
+              if (cached) {
+                onChange(cached);
+                return;
+              }
+            }
+            const user = await this.getProfile(firebaseUser.uid);
             onChange(user);
             void cacheUserProfile(user).catch(onError);
-          })
-          .catch(onError);
+          } catch (error) {
+            if (isFirebaseNetworkError(error)) {
+              const cached = await getCachedUserProfile(firebaseUser.uid).catch(() => null);
+              if (cached) {
+                onChange(cached);
+                return;
+              }
+            }
+            onError(error);
+          }
+        })();
       }, onError);
     } catch (error) {
       onError(error);

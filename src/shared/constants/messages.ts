@@ -18,6 +18,7 @@ export const MESSAGES = {
   LOGIN_INVALID_PASSWORD: 'Contraseña inválida. Inténtalo otra vez.',
   LOGIN_INVALID_CREDENTIALS: 'Correo electrónico o contraseña incorrectos.',
   LOGIN_GENERIC_ERROR: 'No se pudo iniciar sesión. Revisa tu correo electrónico y contraseña.',
+  NETWORK_ERROR: 'Sin conexión a internet. Revisa tu conexión e inténtalo de nuevo.',
   INVALID_CARDHOLDER_NAME: 'Ingresa el nombre del titular como aparece en la tarjeta.',
   INVALID_CARD_NUMBER: 'Ingresa un número de tarjeta válido.',
   INVALID_CARD_EXPIRY: 'La fecha de vencimiento no es válida.',

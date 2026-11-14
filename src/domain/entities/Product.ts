@@ -21,6 +21,7 @@ export interface ProductReview {
   rating: number;
   reviewText?: string;
   createdAt: string;
+  syncStatus?: 'pending' | 'synced' | 'error';
 }
 
 export interface Product {

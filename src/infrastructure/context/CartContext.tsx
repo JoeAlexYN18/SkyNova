@@ -5,7 +5,7 @@ import * as Network from 'expo-network';
 import type { Product } from '@/domain/entities/Product';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { getDatabase, cacheUserProfile, newCartId, withDatabaseTransaction } from '@/infrastructure/data/sqliteDatabase';
-import { getCartFromFirebase, syncCartToFirebase } from '@/infrastructure/data/firebaseDataSync';
+import { getCartFromFirebase, isAuthSessionError, isFirebaseNetworkError, syncCartToFirebase } from '@/infrastructure/data/firebaseDataSync';
 import { productRepository } from '@/infrastructure/container';
 import { useToast } from '@/infrastructure/context/ToastContext';
 
@@ -144,13 +144,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           });
         } catch (error) {
           cloudReadyUsers.current.add(currentUser.id);
-          if (active) show(error instanceof Error ? error.message : 'No se pudo sincronizar el carrito.', 'error');
+          if (active && !isAuthSessionError(error, currentUser.id) && !isFirebaseNetworkError(error)) {
+            show('No se pudo sincronizar el carrito; se usará la copia local.', 'info');
+          }
         }
         if (!active) return;
         hydratedUsers.current.add(currentUser.id);
         dispatch({ type: 'set', userId: currentUser.id, lines: persistedLines });
       } catch (error) {
-        if (active) show(error instanceof Error ? error.message : 'No se pudo cargar el carrito guardado.', 'error');
+        if (active && !isAuthSessionError(error, currentUser.id) && !isFirebaseNetworkError(error)) {
+          show('No se pudo cargar el carrito guardado.', 'error');
+        }
       }
     })();
     return () => { active = false; };
@@ -197,7 +201,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         quantity: line.quantity,
       })));
     }).catch((error: unknown) => {
-      show(error instanceof Error ? error.message : 'No se pudo guardar el carrito.', 'error');
+      if (!isAuthSessionError(error, user.id) && !isFirebaseNetworkError(error)) {
+        show('No se pudo guardar el carrito; se usará la copia local.', 'info');
+      }
     });
   }, [carts, currentUser, lines, networkRevision, show]);
 

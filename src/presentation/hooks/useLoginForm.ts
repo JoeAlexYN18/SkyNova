@@ -8,6 +8,7 @@ import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { MESSAGES } from '@/shared/constants/messages';
 import { firebaseConfigured } from '@/infrastructure/data/firebaseServices';
+import { isFirebaseNetworkError } from '@/infrastructure/data/firebaseDataSync';
 
 type LoginField = 'identifier' | 'password';
 type LoginErrors = Partial<Record<LoginField, string>>;
@@ -82,6 +83,8 @@ export function useLoginForm() {
           errors: { password: MESSAGES.LOGIN_INVALID_CREDENTIALS },
         }));
         show(MESSAGES.LOGIN_INVALID_CREDENTIALS, 'error');
+      } else if (isFirebaseNetworkError(error)) {
+        show(MESSAGES.NETWORK_ERROR, 'error');
       } else {
         show(MESSAGES.LOGIN_GENERIC_ERROR, 'error');
       }

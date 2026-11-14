@@ -1,12 +1,59 @@
-import { doc, getDoc, getDocs, collection, query, setDoc, where, writeBatch } from 'firebase/firestore';
+import { FirebaseError } from 'firebase/app';
+import * as Network from 'expo-network';
+import { doc, deleteDoc, getDoc, getDocs, collection, query, setDoc, where, writeBatch } from 'firebase/firestore';
 import type { Order, OrderPaymentDetails, OrderStatus, ShippingAddressSnapshot } from '@/domain/entities/Order';
 import type { ProductReview } from '@/domain/entities/Product';
-import { firebaseConfigured, getFirebaseFirestore } from './firebaseServices';
+import { firebaseConfigured, getFirebaseAuth, getFirebaseFirestore } from './firebaseServices';
 
 type FirebaseCatalogRecord = { id: string; [field: string]: unknown };
 
+export class AuthSessionError extends Error {
+  constructor() {
+    super('La sesión cambió antes de completar la sincronización con Firebase.');
+    this.name = 'AuthSessionError';
+  }
+}
+
+function requireFirebaseUser(userId: string) {
+  if (getFirebaseAuth().currentUser?.uid !== userId) throw new AuthSessionError();
+}
+
+export async function hasNetworkConnection(): Promise<boolean> {
+  try {
+    const state = await Network.getNetworkStateAsync();
+    return !!state.isConnected && state.isInternetReachable !== false;
+  } catch {
+    return false;
+  }
+}
+
+export function isFirebaseNetworkError(error: unknown): boolean {
+  const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : '';
+  return code === 'auth/network-request-failed'
+    || code === 'auth/unavailable'
+    || code === 'auth/timeout'
+    || code === 'firestore/unavailable'
+    || code === 'unavailable';
+}
+
+export function isAuthSessionError(error: unknown, userId?: string): boolean {
+  if (error instanceof AuthSessionError) return true;
+  if (!(error instanceof FirebaseError)
+    || (error.code !== 'permission-denied' && error.code !== 'unauthenticated')) return false;
+  try {
+    if (!firebaseConfigured) return true;
+    const uid = getFirebaseAuth().currentUser?.uid;
+    return !uid || (userId !== undefined && uid !== userId);
+  } catch {
+    return true;
+  }
+}
+
 export async function syncCartToFirebase(userId: string, items: { productId: string; quantity: number }[]) {
-  if (!firebaseConfigured) return;
+  if (!firebaseConfigured || !(await hasNetworkConnection())) return;
+  requireFirebaseUser(userId);
   const firestore = getFirebaseFirestore();
   const cartRef = doc(firestore, 'carts', userId);
   const current = await getDoc(cartRef);
@@ -20,7 +67,8 @@ export async function syncCartToFirebase(userId: string, items: { productId: str
 }
 
 export async function getCartFromFirebase(userId: string) {
-  if (!firebaseConfigured) return null;
+  if (!firebaseConfigured || !(await hasNetworkConnection())) return null;
+  requireFirebaseUser(userId);
   const snapshot = await getDoc(doc(getFirebaseFirestore(), 'carts', userId));
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
@@ -44,6 +92,7 @@ export async function getCartFromFirebase(userId: string) {
 
 export async function syncAddressToFirebase(address: ShippingAddressSnapshot) {
   if (!firebaseConfigured) return;
+  requireFirebaseUser(address.userId);
   const firestore = getFirebaseFirestore();
   const addressRef = doc(firestore, 'addresses', address.id);
   const userAddresses = await getDocs(query(
@@ -76,6 +125,7 @@ export async function syncAddressToFirebase(address: ShippingAddressSnapshot) {
 
 export async function syncOrderToFirebase(order: Order, receiptStoragePath = order.receiptStoragePath) {
   if (!firebaseConfigured) return;
+  requireFirebaseUser(order.userId);
   const firestore = getFirebaseFirestore();
   await setDoc(doc(firestore, 'orders', order.id), {
     id: order.id,
@@ -109,6 +159,7 @@ export async function syncOrderToFirebase(order: Order, receiptStoragePath = ord
 
 export async function syncReviewToFirebase(review: ProductReview) {
   if (!firebaseConfigured) return;
+  requireFirebaseUser(review.userId);
   await setDoc(
     doc(getFirebaseFirestore(), 'product_reviews', `${review.productId}_${review.userId}`),
     {
@@ -123,16 +174,30 @@ export async function syncReviewToFirebase(review: ProductReview) {
   );
 }
 
+export async function deleteReviewFromFirebase(productId: string, userId: string) {
+  if (!firebaseConfigured) return;
+  requireFirebaseUser(userId);
+  await deleteDoc(doc(getFirebaseFirestore(), 'product_reviews', `${productId}_${userId}`));
+}
+
 export async function getProductReviewsFromFirebase(productId: string) {
-  if (!firebaseConfigured) return [];
+  if (!firebaseConfigured || !(await hasNetworkConnection())) return [];
   const snapshots = await getDocs(
     query(collection(getFirebaseFirestore(), 'product_reviews'), where('product_id', '==', productId)),
   );
   return snapshots.docs.map((snapshot) => mapReview(snapshot.id, snapshot.data()));
 }
 
+export async function getUserReviewsFromFirebase(userId: string) {
+  if (!firebaseConfigured || !(await hasNetworkConnection())) return [];
+  const snapshots = await getDocs(
+    query(collection(getFirebaseFirestore(), 'product_reviews'), where('user_id', '==', userId)),
+  );
+  return snapshots.docs.map((snapshot) => mapReview(snapshot.id, snapshot.data()));
+}
+
 export async function getAllProductReviewsFromFirebase() {
-  if (!firebaseConfigured) return [];
+  if (!firebaseConfigured || !(await hasNetworkConnection())) return [];
   const snapshots = await getDocs(collection(getFirebaseFirestore(), 'product_reviews'));
   return snapshots.docs.map((snapshot) => mapReview(snapshot.id, snapshot.data()));
 }
@@ -185,7 +250,8 @@ function mapReview(id: string, data: Record<string, unknown>): ProductReview {
 }
 
 export async function getOrdersFromFirebase(userId: string): Promise<Order[]> {
-  if (!firebaseConfigured) return [];
+  if (!firebaseConfigured || !(await hasNetworkConnection())) return [];
+  requireFirebaseUser(userId);
   const snapshots = await getDocs(
     query(collection(getFirebaseFirestore(), 'orders'), where('user_id', '==', userId)),
   );
