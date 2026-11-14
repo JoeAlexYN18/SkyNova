@@ -40,6 +40,7 @@ export function HomeScreen() {
   const [showMyReviews, setShowMyReviews] = useState(false);
   const [myReviews, setMyReviews] = useState<UserReviewItem[]>([]);
   const [myReviewsLoaded, setMyReviewsLoaded] = useState(false);
+  const [myReviewsError, setMyReviewsError] = useState(false);
   const [reviewProducts, setReviewProducts] = useState<Record<string, Product>>({});
   const [showAbout, setShowAbout] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
@@ -245,8 +246,9 @@ export function HomeScreen() {
     try {
       const items = await productRepository.listUserReviews(currentUser.id);
       setMyReviews(items);
+      setMyReviewsError(false);
     } catch {
-      setMyReviews([]);
+      setMyReviewsError(true);
     } finally {
       setMyReviewsLoaded(true);
     }
@@ -400,6 +402,15 @@ export function HomeScreen() {
             </View>
             {!myReviewsLoaded ? (
               <View style={styles.centerState}><ActivityIndicator color={colors.primary} /></View>
+            ) : myReviewsError ? (
+              <View style={styles.orderEmptyCard}>
+                <View style={styles.emptyIcon}><MaterialCommunityIcons name="cloud-alert-outline" size={36} color={colors.danger} /></View>
+                <Text style={styles.orderEmptyTitle}>No se pudieron cargar tus reseñas</Text>
+                <Text style={styles.orderEmpty}>Revisa tu conexión e inténtalo de nuevo.</Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={() => { setMyReviewsLoaded(false); void loadMyReviews(); }}>
+                  <Text style={styles.primaryButtonText}>Reintentar</Text>
+                </TouchableOpacity>
+              </View>
             ) : myReviews.length === 0 ? (
               <View style={styles.orderEmptyCard}>
                 <View style={styles.emptyIcon}><MaterialCommunityIcons name="star-outline" size={36} color={colors.primary} /></View>

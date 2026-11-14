@@ -187,8 +187,8 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
           countryCode: user.phone.countryCode,
         }));
       }
-    }).catch((error: unknown) => {
-      if (active) show(error instanceof Error ? error.message : 'No se pudo cargar la dirección guardada.', 'error');
+    }).catch(() => {
+      if (active) show('No se pudo cargar la dirección guardada.', 'error');
     });
     return () => { active = false; };
   }, [currentUser?.id, getDefaultAddress, show]);
