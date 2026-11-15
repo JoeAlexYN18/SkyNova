@@ -1,7 +1,7 @@
 import type { Order } from '@/domain/entities/Order';
 
 type CatalogRecord = { id: string; [field: string]: unknown };
-export interface RestCatalog {
+interface RestCatalog {
   categories: CatalogRecord[];
   products: CatalogRecord[];
   specs: CatalogRecord[];

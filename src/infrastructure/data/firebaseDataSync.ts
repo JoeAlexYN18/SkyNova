@@ -7,7 +7,7 @@ import { firebaseConfigured, getFirebaseAuth, getFirebaseFirestore } from './fir
 
 type FirebaseCatalogRecord = { id: string; [field: string]: unknown };
 
-export class AuthSessionError extends Error {
+class AuthSessionError extends Error {
   constructor() {
     super('La sesión cambió antes de completar la sincronización con Firebase.');
     this.name = 'AuthSessionError';

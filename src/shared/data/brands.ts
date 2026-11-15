@@ -1,7 +1,7 @@
 import type { ProductBrand } from '@/domain/entities/Product';
 
 
-export const OFFICIAL_BRANDS: ProductBrand[] = [
+const OFFICIAL_BRANDS: ProductBrand[] = [
   { name: 'DJI', color: '#22D3EE' },
   { name: 'Autel Robotics', color: '#588BFF' },
   { name: 'Skydio', color: '#B6E5FF' },

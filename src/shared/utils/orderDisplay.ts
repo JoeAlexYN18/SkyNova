@@ -1,9 +1,9 @@
 import type { Order } from '@/domain/entities/Order';
 
-export type OrderSyncState = 'pending' | 'error' | 'synced';
+type OrderSyncState = 'pending' | 'error' | 'synced';
 export type OrderDisplayTone = 'warning' | 'danger' | 'success' | 'info' | 'primary' | 'muted';
 
-export interface OrderDisplayState {
+interface OrderDisplayState {
   label: string;
   tone: OrderDisplayTone;
 }
@@ -35,7 +35,7 @@ export function getOrderDisplayState(order: Order, syncEnabled = true): OrderDis
   }
 }
 
-export interface GroupedOrders {
+interface GroupedOrders {
   all: Order[];
   needsAttention: Order[];
   active: Order[];

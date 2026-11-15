@@ -14,13 +14,13 @@ export type RegisterFormField = keyof RegisterFormValues;
 
 export type RegisterFormErrors = Partial<Record<RegisterFormField, string>>;
 
-export interface RegisterFormState {
+interface RegisterFormState {
   values: RegisterFormValues;
   errors: RegisterFormErrors;
   isSubmitting: boolean;
 }
 
-export type RegisterFormAction =
+type RegisterFormAction =
   | { type: 'SET_FIELD'; field: RegisterFormField; value: RegisterFormValues[RegisterFormField] }
   | { type: 'SET_ERRORS'; errors: RegisterFormErrors }
   | { type: 'SET_SUBMITTING'; isSubmitting: boolean }

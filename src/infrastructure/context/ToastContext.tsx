@@ -8,9 +8,9 @@ import React, {
   useState,
 } from 'react';
 
-export type ToastType = 'success' | 'error' | 'info';
+type ToastType = 'success' | 'error' | 'info';
 
-export interface ToastState {
+interface ToastState {
   message: string;
   type: ToastType;
   visible: boolean;

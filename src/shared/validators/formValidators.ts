@@ -10,7 +10,7 @@ import { MESSAGES } from '../constants/messages';
 import type { CardBrand } from '@/domain/entities/Order';
 
 
-export const isRequired = (value: string): boolean => value.trim().length > 0;
+const isRequired = (value: string): boolean => value.trim().length > 0;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -61,7 +61,7 @@ export function validateTerms(accepted: boolean): string | undefined {
   return accepted ? undefined : MESSAGES.TERMS_REQUIRED;
 }
 
-export type PasswordStrengthLevel = 0 | 1 | 2 | 3 | 4;
+type PasswordStrengthLevel = 0 | 1 | 2 | 3 | 4;
 
 export interface PasswordStrength {
   score: PasswordStrengthLevel;
@@ -91,7 +91,7 @@ export function cardDigits(value: string): string {
   return value.replace(/\D/g, '');
 }
 
-export function isLuhnValid(digits: string): boolean {
+function isLuhnValid(digits: string): boolean {
   if (!/^\d{13,19}$/.test(digits)) return false;
   let sum = 0;
   let doubleDigit = false;

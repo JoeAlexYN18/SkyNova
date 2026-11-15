@@ -1,4 +1,4 @@
-export type ProductType = 'drone' | 'accessory' | 'spare_part';
+type ProductType = 'drone' | 'accessory' | 'spare_part';
 
 export interface ProductBrand {
   name: string;

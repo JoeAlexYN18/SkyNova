@@ -1,4 +1,4 @@
-export interface UserPhone {
+interface UserPhone {
   countryCode: string;
   dialCode: string;
 
