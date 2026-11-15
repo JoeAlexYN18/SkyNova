@@ -11,9 +11,21 @@ export interface RestCatalog {
 const apiBaseUrl = process.env.EXPO_PUBLIC_SKYNOVA_API_URL?.trim().replace(/\/+$/, '');
 export const restApiConfigured = Boolean(apiBaseUrl);
 
+const REQUEST_TIMEOUT_MS = 15000;
+
+async function fetchWithTimeout(url: string, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function getCatalogFromRest(): Promise<RestCatalog | null> {
   if (!apiBaseUrl) return null;
-  const response = await fetch(`${apiBaseUrl}/catalog`);
+  const response = await fetchWithTimeout(`${apiBaseUrl}/catalog`);
   if (!response.ok) throw new Error(`El servicio REST respondió con estado ${response.status}.`);
   const value: unknown = await response.json();
   if (!isCatalog(value)) throw new Error('El servicio REST devolvió un catálogo con formato inválido.');
@@ -22,7 +34,7 @@ export async function getCatalogFromRest(): Promise<RestCatalog | null> {
 
 export async function syncOrderToRest(order: Order) {
   if (!apiBaseUrl) return;
-  const response = await fetch(`${apiBaseUrl}/orders/${encodeURIComponent(order.id)}`, {
+  const response = await fetchWithTimeout(`${apiBaseUrl}/orders/${encodeURIComponent(order.id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Product, ProductCategory, ProductReview } from '@/domain/entities/Product';
 import { colors, radius, spacing } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
@@ -8,7 +9,9 @@ import { productRepository } from '@/infrastructure/container';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { useNetworkStatus } from '@/presentation/hooks/useNetworkStatus';
+import { isExpectedSyncError } from '@/infrastructure/data/firebaseDataSync';
 import { ToastHost } from '@/presentation/components/ToastHost';
+import { useModalLayer } from '@/presentation/components/toastLayer';
 
 interface Props {
   product: Product | null;
@@ -28,6 +31,8 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const reviewSubmitLock = useRef(false);
   const [isDeletingReview, setIsDeletingReview] = useState(false);
+  const modalLayerId = useModalLayer(product !== null);
+  const insets = useSafeAreaInsets();
   const previousOwnSync = useRef<{ productId?: string; sync?: string }>({});
   const isOnline = useNetworkStatus();
   const { currentUser } = useAuth();
@@ -37,7 +42,9 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
   useEffect(() => {
     if (!productId) return;
     let active = true;
-    productRepository.listReviews(productId, () => {
+    productRepository.listReviews(productId, (error) => {
+      console.warn('Sync de reseñas falló:', error);
+      if (isExpectedSyncError(error, currentUser?.id)) return;
       show('No se pudieron actualizar las reseñas; se muestran las guardadas en este dispositivo.', 'info');
     }).then((result) => {
       if (!active) return;
@@ -337,7 +344,7 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
             <Text style={styles.taxonomyNote}>Precio en {product.currency}. Disponibilidad sujeta a cambios.</Text>
           </ScrollView>
 
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
             <TouchableOpacity disabled={!available} onPress={() => { onAdd(product); onClose(); }} style={[styles.secondaryButton, !available && styles.disabledButton]} accessibilityRole="button">
               <MaterialCommunityIcons name="cart-plus" size={19} color={available ? colors.primary : colors.textMuted} />
               <Text style={[styles.secondaryButtonText, !available && styles.disabledText]}>Agregar al carrito</Text>
@@ -348,7 +355,7 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
             </TouchableOpacity>
           </View>
         </View>
-        <ToastHost />
+        <ToastHost layerId={modalLayerId} />
       </View>
     </Modal>
   );
@@ -359,7 +366,7 @@ function ReviewRow({ review }: { review: ProductReview }) {
     <View style={styles.reviewCard}>
       <View style={styles.reviewHeader}>
         <Text style={styles.reviewerName}>{review.reviewerName}</Text>
-        <Text style={styles.reviewDate}>{new Date(review.createdAt).toLocaleDateString('es-CO')}</Text>
+        <Text style={styles.reviewDate}>{new Date(review.createdAt).toLocaleDateString('es-PE')}</Text>
       </View>
       <View style={styles.reviewStarsDisplay}>
         {Array.from({ length: 5 }, (_, index) => (

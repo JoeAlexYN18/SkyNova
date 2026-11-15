@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, router } from 'expo-router';
 import { KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,8 +21,10 @@ export function ForgotPasswordScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLock = useRef(false);
 
   const submit = async () => {
+    if (submitLock.current) return;
     const nextErrors: Record<string, string> = {};
     const normalizedIdentifier = identifier.trim();
     if (!normalizedIdentifier) nextErrors.identifier = MESSAGES.LOGIN_IDENTIFIER_REQUIRED;
@@ -38,6 +40,7 @@ export function ForgotPasswordScreen() {
     }
 
     setErrors({});
+    submitLock.current = true;
     setIsSubmitting(true);
     try {
       if (firebaseConfigured) {
@@ -65,6 +68,7 @@ export function ForgotPasswordScreen() {
         );
       }
     } finally {
+      submitLock.current = false;
       setIsSubmitting(false);
     }
   };

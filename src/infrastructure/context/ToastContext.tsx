@@ -34,10 +34,21 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     visible: false,
   });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastShown = useRef<{ message: string; type: ToastType; at: number } | null>(null);
 
   const show = useCallback((message: string, type: ToastType = 'info') => {
     if (timer.current) clearTimeout(timer.current);
-    setToast({ message, type, visible: true });
+    const last = lastShown.current;
+    const repeated = last !== null
+      && last.message === message
+      && last.type === type
+      && Date.now() - last.at < AUTO_HIDE_MS;
+    lastShown.current = { message, type, at: Date.now() };
+    if (!repeated) {
+      setToast({ message, type, visible: true });
+    } else {
+      setToast((current) => (current.visible ? current : { message, type, visible: true }));
+    }
     timer.current = setTimeout(() => {
       setToast((current) => ({ ...current, visible: false }));
       timer.current = null;

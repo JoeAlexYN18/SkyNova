@@ -49,7 +49,9 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           'id', 'product_id', 'user_id', 'reviewer_name', 'rating', 'review_text', 'created_at'
         ]);
-      allow delete: if signedIn() && resource.data.user_id == request.auth.uid;
+      allow delete: if signedIn()
+        && (!exists(/databases/$(database)/documents/product_reviews/$(reviewId))
+          || resource.data.user_id == request.auth.uid);
     }
 
     match /carts/{userId} {

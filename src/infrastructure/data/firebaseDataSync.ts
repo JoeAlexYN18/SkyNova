@@ -51,6 +51,26 @@ export function isAuthSessionError(error: unknown, userId?: string): boolean {
   }
 }
 
+const EXPECTED_SYNC_ERROR_CODES = new Set([
+  'permission-denied',
+  'failed-precondition',
+  'resource-exhausted',
+  'deadline-exceeded',
+  'unavailable',
+  'internal',
+  'aborted',
+  'cancelled',
+  'unknown',
+]);
+
+export function isExpectedSyncError(error: unknown, userId?: string): boolean {
+  if (isFirebaseNetworkError(error) || isAuthSessionError(error, userId)) return true;
+  const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : '';
+  return EXPECTED_SYNC_ERROR_CODES.has(code);
+}
+
 export async function syncCartToFirebase(userId: string, items: { productId: string; quantity: number }[]) {
   if (!firebaseConfigured || !(await hasNetworkConnection())) return;
   requireFirebaseUser(userId);
@@ -180,7 +200,10 @@ export async function syncReviewToFirebase(review: ProductReview) {
 export async function deleteReviewFromFirebase(productId: string, userId: string) {
   if (!firebaseConfigured) return;
   requireFirebaseUser(userId);
-  await deleteDoc(doc(getFirebaseFirestore(), 'product_reviews', `${productId}_${userId}`));
+  const reviewRef = doc(getFirebaseFirestore(), 'product_reviews', `${productId}_${userId}`);
+  const snapshot = await getDoc(reviewRef);
+  if (!snapshot.exists()) return;
+  await deleteDoc(reviewRef);
 }
 
 export async function getProductReviewsFromFirebase(productId: string) {
@@ -188,7 +211,9 @@ export async function getProductReviewsFromFirebase(productId: string) {
   const snapshots = await getDocs(
     query(collection(getFirebaseFirestore(), 'product_reviews'), where('product_id', '==', productId)),
   );
-  return snapshots.docs.map((snapshot) => mapReview(snapshot.id, snapshot.data()));
+  return snapshots.docs
+    .map((snapshot) => mapReview(snapshot.id, snapshot.data()))
+    .filter((review): review is ProductReview => review !== null);
 }
 
 export async function getUserReviewsFromFirebase(userId: string) {
@@ -196,13 +221,17 @@ export async function getUserReviewsFromFirebase(userId: string) {
   const snapshots = await getDocs(
     query(collection(getFirebaseFirestore(), 'product_reviews'), where('user_id', '==', userId)),
   );
-  return snapshots.docs.map((snapshot) => mapReview(snapshot.id, snapshot.data()));
+  return snapshots.docs
+    .map((snapshot) => mapReview(snapshot.id, snapshot.data()))
+    .filter((review): review is ProductReview => review !== null);
 }
 
 export async function getAllProductReviewsFromFirebase() {
   if (!firebaseConfigured || !(await hasNetworkConnection())) return [];
   const snapshots = await getDocs(collection(getFirebaseFirestore(), 'product_reviews'));
-  return snapshots.docs.map((snapshot) => mapReview(snapshot.id, snapshot.data()));
+  return snapshots.docs
+    .map((snapshot) => mapReview(snapshot.id, snapshot.data()))
+    .filter((review): review is ProductReview => review !== null);
 }
 
 export async function getCatalogFromFirebase(): Promise<{
@@ -227,7 +256,7 @@ export async function getCatalogFromFirebase(): Promise<{
   };
 }
 
-function mapReview(id: string, data: Record<string, unknown>): ProductReview {
+function mapReview(id: string, data: Record<string, unknown>): ProductReview | null {
     if (
       typeof data.product_id !== 'string'
       || typeof data.user_id !== 'string'
@@ -238,7 +267,8 @@ function mapReview(id: string, data: Record<string, unknown>): ProductReview {
       || data.rating > 5
       || typeof data.created_at !== 'string'
     ) {
-      throw new Error(`La reseña ${id} tiene un formato inválido en Firebase.`);
+      console.warn(`Se omitió la reseña ${id}: formato inválido en Firebase.`);
+      return null;
     }
 
     return {
@@ -258,7 +288,9 @@ export async function getOrdersFromFirebase(userId: string): Promise<Order[]> {
   const snapshots = await getDocs(
     query(collection(getFirebaseFirestore(), 'orders'), where('user_id', '==', userId)),
   );
-  return snapshots.docs.map((snapshot) => {
+  return snapshots.docs
+    .map((snapshot): Order | null => {
+    try {
     const data = snapshot.data();
     const address = data.shipping_address;
     if (
@@ -334,7 +366,12 @@ export async function getOrdersFromFirebase(userId: string): Promise<Order[]> {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-  });
+    } catch (error) {
+      console.warn(`Se omitió el pedido ${snapshot.id}: ${error instanceof Error ? error.message : 'formato inválido'}.`);
+      return null;
+    }
+    })
+    .filter((order): order is Order => order !== null);
 }
 
 function parseOrderPaymentDetails(value: unknown): OrderPaymentDetails | undefined {

@@ -14,7 +14,9 @@ import type { Product } from '@/domain/entities/Product';
 import { COUNTRIES } from '@/infrastructure/data/countries';
 import { useNetworkStatus } from '@/presentation/hooks/useNetworkStatus';
 import { ToastHost } from '@/presentation/components/ToastHost';
-import { colors } from '@/shared/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalLayer } from '@/presentation/components/toastLayer';
+import { colors, spacing } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import {
   cardDigits,
@@ -42,6 +44,8 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [completedOffline, setCompletedOffline] = useState(false);
   const isOnline = useNetworkStatus();
+  const checkoutLayerId = useModalLayer(checkoutOpen || completedOrder !== null);
+  const insets = useSafeAreaInsets();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
@@ -329,7 +333,7 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
         </View>
       </View>
       ) : (
-      <View style={styles.checkoutOverlay}><View style={styles.checkoutSheet}>
+      <View style={styles.checkoutOverlay}><View style={[styles.checkoutSheet, { paddingBottom: Math.max(insets.bottom, spacing.xxl) }]}>
         <View style={styles.checkoutHeader}>
           <View>
             <Text style={styles.checkoutTitle}>{countryPickerOpen ? 'País de entrega' : 'Finalizar compra'}</Text>
@@ -619,7 +623,7 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
         </ScrollView>
       </View></View>
       )}
-      <ToastHost />
+      <ToastHost layerId={checkoutLayerId} />
     </Modal>
   </View>;
 }

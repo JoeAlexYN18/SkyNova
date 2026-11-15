@@ -1,6 +1,6 @@
 // Refacto 1
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -76,11 +76,12 @@ export default function OrderDetailScreen() {
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [address, setAddress] = useState<CheckoutInput | null>(null);
   const [busy, setBusy] = useState<'save' | 'cancel' | 'retry' | null>(null);
+  const busyRef = useRef(false);
   const isOnline = useNetworkStatus();
 
   const order = useMemo(() => orders.find((candidate) => candidate.id === id) ?? null, [orders, id]);
-  const displayState = order ? getOrderDisplayState(order) : null;
-  const syncState = order ? getOrderSyncState(order) : 'synced';
+  const displayState = order ? getOrderDisplayState(order, orderSyncEnabled) : null;
+  const syncState = order ? getOrderSyncState(order, orderSyncEnabled) : 'synced';
   const editable = order?.status === 'pending' || order?.status === 'paid';
   const total = order?.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) ?? 0;
 
@@ -141,10 +142,12 @@ export default function OrderDetailScreen() {
   const isOfflineNow = async () => !(await hasNetworkConnection());
 
   const handleSaveAddress = async () => {
+    if (busyRef.current) return;
     if (!order || !address || !canSaveAddress) {
       show('Completa los campos obligatorios con datos válidos.', 'error');
       return;
     }
+    busyRef.current = true;
     setBusy('save');
     try {
       const offline = await isOfflineNow();
@@ -169,6 +172,7 @@ export default function OrderDetailScreen() {
     } catch (error) {
       show(error instanceof Error ? error.message : 'No se pudo actualizar el pedido.', 'error');
     } finally {
+      busyRef.current = false;
       setBusy(null);
     }
   };
@@ -185,6 +189,8 @@ export default function OrderDetailScreen() {
           text: 'Cancelar pedido',
           style: 'destructive',
           onPress: () => {
+            if (busyRef.current) return;
+            busyRef.current = true;
             setBusy('cancel');
             void cancelOrder(order.id, currentUser.id)
               .then(async () => {
@@ -195,7 +201,7 @@ export default function OrderDetailScreen() {
                 );
               })
               .catch((error: unknown) => show(error instanceof Error ? error.message : 'No se pudo cancelar el pedido.', 'error'))
-              .finally(() => setBusy(null));
+              .finally(() => { busyRef.current = false; setBusy(null); });
           },
         },
       ],
@@ -203,13 +209,15 @@ export default function OrderDetailScreen() {
   };
 
   const handleRetrySync = () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy('retry');
     void retryOrderSync(currentUser.id)
       .then((synced) => show(
         synced ? 'Todos tus pedidos están sincronizados.' : 'Aún no se pudo confirmar la sincronización; reintentaremos automáticamente.',
         synced ? 'success' : 'info',
       ))
-      .finally(() => setBusy(null));
+      .finally(() => { busyRef.current = false; setBusy(null); });
   };
 
   const stepIndex = STATUS_STEP_INDEX[order.status];
@@ -223,7 +231,7 @@ export default function OrderDetailScreen() {
         </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.headerTitle}>Pedido #{order.id.slice(-8).toUpperCase()}</Text>
-          <Text style={styles.headerSubtitle}>{new Date(order.createdAt).toLocaleDateString('es-CO')}</Text>
+          <Text style={styles.headerSubtitle}>{new Date(order.createdAt).toLocaleDateString('es-PE')}</Text>
         </View>
         {chipTone && displayState && (
           <View style={[styles.statusChip, { backgroundColor: chipTone.backgroundColor }]}>

@@ -70,19 +70,16 @@ export function useLoginForm() {
           ...current,
           errors: { identifier: MESSAGES.LOGIN_USER_NOT_FOUND },
         }));
-        show(MESSAGES.LOGIN_USER_NOT_FOUND, 'error');
       } else if (error instanceof InvalidPasswordError) {
         setState((current) => ({
           ...current,
           errors: { password: MESSAGES.LOGIN_INVALID_PASSWORD },
         }));
-        show(MESSAGES.LOGIN_INVALID_PASSWORD, 'error');
       } else if (error instanceof InvalidCredentialsError) {
         setState((current) => ({
           ...current,
           errors: { password: MESSAGES.LOGIN_INVALID_CREDENTIALS },
         }));
-        show(MESSAGES.LOGIN_INVALID_CREDENTIALS, 'error');
       } else if (isFirebaseNetworkError(error)) {
         show(MESSAGES.NETWORK_ERROR, 'error');
       } else {

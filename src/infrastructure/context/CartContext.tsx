@@ -5,7 +5,7 @@ import * as Network from 'expo-network';
 import type { Product } from '@/domain/entities/Product';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { getDatabase, cacheUserProfile, newCartId, withDatabaseTransaction } from '@/infrastructure/data/sqliteDatabase';
-import { getCartFromFirebase, isAuthSessionError, isFirebaseNetworkError, syncCartToFirebase } from '@/infrastructure/data/firebaseDataSync';
+import { getCartFromFirebase, isExpectedSyncError, syncCartToFirebase } from '@/infrastructure/data/firebaseDataSync';
 import { productRepository } from '@/infrastructure/container';
 import { useToast } from '@/infrastructure/context/ToastContext';
 
@@ -157,7 +157,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           });
         } catch (error) {
           cloudReadyUsers.current.add(currentUser.id);
-          if (active && !isAuthSessionError(error, currentUser.id) && !isFirebaseNetworkError(error)) {
+          if (active && !isExpectedSyncError(error, currentUser.id)) {
             show('No se pudo sincronizar el carrito; se usará la copia local.', 'info');
           }
         }
@@ -165,7 +165,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         hydratedUsers.current.add(currentUser.id);
         dispatch({ type: 'hydrate', userId: currentUser.id, lines: persistedLines });
       } catch (error) {
-        if (active && !isAuthSessionError(error, currentUser.id) && !isFirebaseNetworkError(error)) {
+        if (active && !isExpectedSyncError(error, currentUser.id)) {
           show('No se pudo cargar el carrito guardado.', 'error');
         }
       }
@@ -214,7 +214,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         quantity: line.quantity,
       })));
     }).catch((error: unknown) => {
-      if (!isAuthSessionError(error, user.id) && !isFirebaseNetworkError(error)) {
+      if (!isExpectedSyncError(error, user.id)) {
         show('No se pudo guardar el carrito; se usará la copia local.', 'info');
       }
     });

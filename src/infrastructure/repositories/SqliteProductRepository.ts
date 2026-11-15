@@ -11,6 +11,7 @@ import {
   getProductReviewsFromFirebase,
   getUserReviewsFromFirebase,
   hasNetworkConnection,
+  isAuthSessionError,
   syncReviewToFirebase,
 } from '@/infrastructure/data/firebaseDataSync';
 import { getCatalogFromRest, restApiConfigured } from '@/infrastructure/data/restApiClient';
@@ -595,6 +596,7 @@ export class SqliteProductRepository implements IProductRepository {
           );
           syncedCount += 1;
         } catch (error) {
+          if (isAuthSessionError(error, row.user_id)) break;
           const message = error instanceof Error ? error.message : 'No se pudo eliminar la reseña.';
           await database.runAsync(
             "UPDATE product_reviews SET sync_status = 'error', sync_error = ? WHERE id = ?",
@@ -614,6 +616,7 @@ export class SqliteProductRepository implements IProductRepository {
         );
         syncedCount += 1;
       } catch (error) {
+        if (isAuthSessionError(error, row.user_id)) break;
         const message = error instanceof Error ? error.message : 'No se pudo publicar la reseña.';
         await database.runAsync(
           "UPDATE product_reviews SET sync_status = 'error', sync_error = ? WHERE id = ?",

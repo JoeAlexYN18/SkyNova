@@ -5,14 +5,14 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "expo": "~58.0.24",
+    "expo": "~58.0.25",
     "expo-constants": "~58.0.13",
     "expo-font": "~58.0.10",
     "expo-linking": "~58.0.17",
     "expo-network": "~58.0.5",
     "expo-router": "~58.0.31",
     "expo-splash-screen": "~58.0.14",
-    "expo-sqlite": "~58.0.16",
+    "expo-sqlite": "~58.0.17",
     "firebase": "^13.3.0",
     "libphonenumber-js": "^1.13.15",
     "react": "19.3.0",
@@ -33,8 +33,8 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "mock:api": "node mock-rest/server.cjs"

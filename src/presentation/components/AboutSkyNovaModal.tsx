@@ -4,9 +4,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BrandLogo } from '@/presentation/components/BrandLogo';
 import { ToastHost } from '@/presentation/components/ToastHost';
+import { useModalLayer } from '@/presentation/components/toastLayer';
 import { colors, radius, spacing } from '@/shared/theme';
 
 export function AboutSkyNovaModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const layerId = useModalLayer(visible);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -44,7 +46,7 @@ export function AboutSkyNovaModal({ visible, onClose }: { visible: boolean; onCl
           </View>
           <Text style={styles.location}>Estados Unidos</Text>
         </ScrollView>
-        <ToastHost />
+        <ToastHost layerId={layerId} />
       </SafeAreaView>
     </Modal>
   );

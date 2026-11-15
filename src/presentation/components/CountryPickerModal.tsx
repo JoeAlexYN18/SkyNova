@@ -12,6 +12,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Country } from '@/domain/entities/Country';
 import { ToastHost } from '@/presentation/components/ToastHost';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalLayer } from '@/presentation/components/toastLayer';
 import { colors, radius, spacing, typography } from '@/shared/theme';
 
 interface CountryPickerModalProps {
@@ -32,6 +34,8 @@ export function CountryPickerModal({
   selectedCode,
 }: CountryPickerModalProps) {
   const [query, setQuery] = useState('');
+  const layerId = useModalLayer(visible);
+  const insets = useSafeAreaInsets();
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -48,7 +52,7 @@ export function CountryPickerModal({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.xxl) }]}>
           <View style={styles.handle} />
           <Text style={styles.title}>Selecciona tu país</Text>
 
@@ -100,7 +104,7 @@ export function CountryPickerModal({
             />
           )}
         </View>
-        <ToastHost />
+        <ToastHost layerId={layerId} />
       </View>
     </Modal>
   );

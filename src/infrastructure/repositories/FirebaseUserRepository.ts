@@ -13,7 +13,6 @@ import {
 } from 'firebase/auth';
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -190,7 +189,7 @@ export class FirebaseUserRepository implements IUserRepository {
       const firestore = getFirebaseFirestore();
       const userRef = doc(firestore, 'users', userId);
       const userSnapshot = await getDoc(userRef);
-      if (!userSnapshot.exists()) throw new Error('No se encontró el perfil de esta cuenta en Firebase.');
+      const profileExisted = userSnapshot.exists();
 
       const [addressSnapshots, orderSnapshots, reviewSnapshots, cartSnapshot] = await Promise.all([
         getDocs(query(collection(firestore, 'addresses'), where('user_id', '==', userId))),
@@ -203,29 +202,31 @@ export class FirebaseUserRepository implements IUserRepository {
         ...orderSnapshots.docs,
         ...reviewSnapshots.docs,
         ...(cartSnapshot.exists() ? [cartSnapshot] : []),
+        ...(profileExisted ? [userSnapshot] : []),
       ];
       for (let offset = 0; offset < ownedDocuments.length; offset += 450) {
         const batch = writeBatch(firestore);
         ownedDocuments.slice(offset, offset + 450).forEach((snapshot) => batch.delete(snapshot.ref));
         await batch.commit();
       }
-      await deleteDoc(userRef);
 
       try {
         await deleteUser(authUser);
       } catch (error) {
-        try {
-          await setDoc(userRef, {
-            full_name: requiredString(userSnapshot.get('full_name'), 'nombre'),
-            email: authUser.email,
-            phone_country: requiredString(userSnapshot.get('phone_country'), 'país'),
-            phone_dial_code: requiredString(userSnapshot.get('phone_dial_code'), 'código telefónico'),
-            phone_number: requiredString(userSnapshot.get('phone_number'), 'teléfono'),
-            created_at: requiredString(userSnapshot.get('created_at'), 'fecha de creación'),
-            updated_at: new Date().toISOString(),
-          });
-        } catch {
-          throw new Error('Firebase no pudo eliminar la cuenta y tampoco se pudo restaurar el perfil. Contacta a soporte.');
+        if (profileExisted) {
+          try {
+            await setDoc(userRef, {
+              full_name: requiredString(userSnapshot.get('full_name'), 'nombre'),
+              email: authUser.email,
+              phone_country: requiredString(userSnapshot.get('phone_country'), 'país'),
+              phone_dial_code: requiredString(userSnapshot.get('phone_dial_code'), 'código telefónico'),
+              phone_number: requiredString(userSnapshot.get('phone_number'), 'teléfono'),
+              created_at: requiredString(userSnapshot.get('created_at'), 'fecha de creación'),
+              updated_at: new Date().toISOString(),
+            });
+          } catch {
+            throw new Error('Firebase no pudo eliminar la cuenta y tampoco se pudo restaurar el perfil. Contacta a soporte.');
+          }
         }
         if (firebaseErrorCode(error) === 'auth/requires-recent-login') {
           throw new Error('Por seguridad, vuelve a iniciar sesión y repite la eliminación de tu cuenta.');

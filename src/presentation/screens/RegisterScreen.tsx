@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, router } from 'expo-router';
 import {
+  AccessibilityInfo,
+  Animated,
+  BackHandler,
+  Easing,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -10,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Country } from '@/domain/entities/Country';
 import { DEFAULT_COUNTRY } from '@/infrastructure/data/countries';
 import { colors, spacing, typography } from '@/shared/theme';
@@ -27,15 +33,97 @@ export function RegisterScreen() {
   const { countries, isLoading: isLoadingCountries } = useCountries();
   const { state, setField, submit } = useRegisterForm(DEFAULT_COUNTRY);
   const [isCountryPickerVisible, setIsCountryPickerVisible] = useState(false);
+  const [isCelebrating, setIsCelebrating] = useState(false);
+  const actionStarted = useRef(false);
+  const [celebration] = useState(() => new Animated.Value(0));
   const isIOS = Platform.OS === 'ios';
 
   const { values, errors, isSubmitting } = state;
 
+  useEffect(() => {
+    if (!isCelebrating) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => subscription.remove();
+  }, [isCelebrating]);
+
   const handleSelectCountry = (country: Country) => setField('country', country);
 
   const handleRegister = async () => {
-    const registered = await submit();
-    if (registered) router.replace('/home' as never);
+    if (actionStarted.current || isCelebrating) return;
+    actionStarted.current = true;
+    Keyboard.dismiss();
+    try {
+      const registered = await submit();
+      if (!registered) {
+        actionStarted.current = false;
+        return;
+      }
+
+      setIsCelebrating(true);
+      const reduceMotion = await AccessibilityInfo.isReduceMotionEnabled();
+      celebration.setValue(0);
+      const animationFinished = new Promise<boolean>((resolve) => {
+        Animated.timing(celebration, {
+          toValue: 1,
+          duration: reduceMotion ? 500 : 1900,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start(({ finished }) => resolve(finished));
+      });
+      const finished = await animationFinished;
+      if (finished) {
+        router.replace('/home' as never);
+        return;
+      }
+      setIsCelebrating(false);
+      actionStarted.current = false;
+    } catch {
+      setIsCelebrating(false);
+    } finally {
+      actionStarted.current = false;
+    }
+  };
+
+  const ringStyle = {
+    opacity: celebration.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 1, 1] }),
+    transform: [
+      {
+        scale: celebration.interpolate({
+          inputRange: [0, 0.35, 1],
+          outputRange: [0.4, 1, 1],
+        }),
+      },
+    ],
+  };
+
+  const checkStyle = {
+    opacity: celebration.interpolate({ inputRange: [0.18, 0.4, 1], outputRange: [0, 1, 1] }),
+    transform: [
+      {
+        scale: celebration.interpolate({
+          inputRange: [0.18, 0.42, 1],
+          outputRange: [0, 1.25, 1],
+        }),
+      },
+    ],
+  };
+
+  const titleStyle = {
+    opacity: celebration.interpolate({ inputRange: [0.4, 0.65, 1], outputRange: [0, 1, 1] }),
+    transform: [
+      {
+        translateY: celebration.interpolate({ inputRange: [0.4, 0.65, 1], outputRange: [14, 0, 0] }),
+      },
+    ],
+  };
+
+  const taglineStyle = {
+    opacity: celebration.interpolate({ inputRange: [0.62, 0.85, 1], outputRange: [0, 1, 1] }),
+    transform: [
+      {
+        translateY: celebration.interpolate({ inputRange: [0.62, 0.85, 1], outputRange: [10, 0, 0] }),
+      },
+    ],
   };
 
   return (
@@ -118,8 +206,8 @@ export function RegisterScreen() {
             <PrimaryButton
               title="Crear cuenta"
               icon="person-add"
-              loading={isSubmitting}
-              onPress={handleRegister}
+              loading={isSubmitting || isCelebrating}
+              onPress={() => { void handleRegister(); }}
             />
             <Text style={styles.loginPrompt}>
               ¿Ya tienes una cuenta activa?{' '}
@@ -145,6 +233,22 @@ export function RegisterScreen() {
         isLoading={isLoadingCountries}
         selectedCode={values.country.code}
       />
+
+      {isCelebrating && (
+        <View style={styles.celebrationOverlay}>
+          <Animated.View style={[styles.ring, ringStyle]}>
+            <Animated.View style={checkStyle}>
+              <MaterialCommunityIcons name="check" size={52} color={colors.primary} />
+            </Animated.View>
+          </Animated.View>
+          <Animated.Text style={[styles.celebrationTitle, titleStyle]}>
+            ¡CUENTA CREADA!
+          </Animated.Text>
+          <Animated.Text style={[styles.celebrationTagline, taglineStyle]}>
+            TODO LISTO PARA VOLAR
+          </Animated.Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -153,6 +257,43 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  celebrationOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 20,
+    elevation: 20,
+    backgroundColor: '#070B14',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  ring: {
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
+  },
+  celebrationTitle: {
+    ...typography.title,
+    color: colors.textPrimary,
+    fontSize: 26,
+    letterSpacing: 1,
+    marginTop: spacing.xl,
+  },
+  celebrationTagline: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '800',
+    letterSpacing: 4,
+    marginTop: spacing.sm,
   },
   flex: { flex: 1 },
   scrollContent: {

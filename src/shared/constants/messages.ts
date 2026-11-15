@@ -11,7 +11,6 @@ export const MESSAGES = {
     'Debes aceptar los Términos de servicio y la Política de privacidad para continuar.',
   EMAIL_TAKEN: 'Ya existe una cuenta registrada con este correo.',
   FORM_HAS_ERRORS: 'Revisa los campos marcados en rojo.',
-  REGISTER_SUCCESS: '¡Cuenta creada con éxito! Bienvenido a SkyNova.',
   REGISTER_GENERIC_ERROR: 'No pudimos crear tu cuenta. Intenta nuevamente.',
   LOGIN_IDENTIFIER_REQUIRED: 'Ingresa tu correo electrónico.',
   LOGIN_USER_NOT_FOUND: 'No encontramos una cuenta con ese correo electrónico.',

@@ -79,7 +79,6 @@ export function useRegisterForm(defaultCountry: Country) {
         password: state.values.password,
       });
 
-      show(MESSAGES.REGISTER_SUCCESS, 'success');
       dispatch({ type: 'RESET', initialValues: buildInitialRegisterFormState(defaultCountry).values });
       return true;
     } catch (error) {

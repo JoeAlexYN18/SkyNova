@@ -25,6 +25,7 @@ import { PhoneField } from '@/presentation/components/PhoneField';
 import { PrimaryButton } from '@/presentation/components/PrimaryButton';
 import { TextField } from '@/presentation/components/TextField';
 import { ToastHost } from '@/presentation/components/ToastHost';
+import { useModalLayer } from '@/presentation/components/toastLayer';
 import { colors, radius, spacing } from '@/shared/theme';
 import {
   validateConfirmPassword,
@@ -69,6 +70,7 @@ export function AccountSettingsModal({
   const [deletePassword, setDeletePassword] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const modalLayerId = useModalLayer(visible);
   const countries = useMemo(() => COUNTRIES, []);
 
   const setField = (field: FormField, value: string) => {
@@ -123,7 +125,6 @@ export function AccountSettingsModal({
     } catch (error) {
       if (error instanceof EmailAlreadyRegisteredError) {
         setErrors((current) => ({ ...current, email: error.message }));
-        show(error.message, 'error');
       } else {
         show(profileUpdateErrorMessage(error), 'error');
       }
@@ -139,9 +140,7 @@ export function AccountSettingsModal({
       return;
     }
     if (!(await hasNetworkConnection())) {
-      const message = 'Se necesita conexión a internet para eliminar la cuenta.';
-      setDeleteError(message);
-      show(message, 'error');
+      setDeleteError('Se necesita conexión a internet para eliminar la cuenta.');
       return;
     }
     setDeleteError(null);
@@ -151,9 +150,7 @@ export function AccountSettingsModal({
       show('Tu cuenta y sus datos se eliminaron correctamente.', 'success');
       onClose();
     } catch (error) {
-      const message = accountDeletionErrorMessage(error);
-      setDeleteError(message);
-      show(message, 'error');
+      setDeleteError(accountDeletionErrorMessage(error));
     } finally {
       setIsDeletingAccount(false);
     }
@@ -304,7 +301,7 @@ export function AccountSettingsModal({
           isLoading={false}
           selectedCode={country.code}
         />
-        <ToastHost />
+        <ToastHost layerId={modalLayerId} />
       </SafeAreaView>
     </Modal>
   );

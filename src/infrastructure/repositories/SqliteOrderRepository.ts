@@ -45,7 +45,13 @@ export class SqliteOrderRepository implements IOrderRepository {
     } catch (error) {
       onSyncError?.(error);
     }
-    for (const order of cloudOrders) await this.cacheOrder(order);
+    for (const order of cloudOrders) {
+      try {
+        await this.cacheOrder(order);
+      } catch (error) {
+        console.warn(`Se omitió el pedido ${order.id} del caché local: ${error instanceof Error ? error.message : 'error de SQLite'}.`);
+      }
+    }
     const latestCloudOrder = cloudOrders.sort((left, right) =>
       right.createdAt.localeCompare(left.createdAt),
     )[0];
@@ -54,7 +60,16 @@ export class SqliteOrderRepository implements IOrderRepository {
       userId,
     );
     if (latestCloudOrder && !hasLocalDefault) {
-      await this.saveAddress(latestCloudOrder.shippingAddress, true);
+      let defaultAddress = latestCloudOrder.shippingAddress;
+      if (defaultAddress.userId !== userId) defaultAddress = { ...defaultAddress, userId };
+      const addressOwner = await database.getFirstAsync<{ user_id: string }>(
+        'SELECT user_id FROM addresses WHERE id = ?',
+        defaultAddress.id,
+      );
+      if (addressOwner && addressOwner.user_id !== userId) {
+        defaultAddress = { ...defaultAddress, id: `addr_${latestCloudOrder.id}` };
+      }
+      await this.saveAddress(defaultAddress, true);
     }
     const row = await database.getFirstAsync<{
       id: string;
@@ -91,7 +106,13 @@ export class SqliteOrderRepository implements IOrderRepository {
     } catch (error) {
       onSyncError?.(error);
     }
-    for (const order of cloudOrders) await this.cacheOrder(order);
+    for (const order of cloudOrders) {
+      try {
+        await this.cacheOrder(order);
+      } catch (error) {
+        console.warn(`Se omitió el pedido ${order.id} del caché local: ${error instanceof Error ? error.message : 'error de SQLite'}.`);
+      }
+    }
     const database = await getDatabase();
     const rows = await database.getAllAsync<OrderRow>(
       `SELECT o.*, a.recipient, a.phone, a.line1, a.city, a.region, a.postal_code, a.country_code
@@ -400,11 +421,20 @@ export class SqliteOrderRepository implements IOrderRepository {
       );
       if (localOrder && localOrder.sync_status !== 'synced') return;
       await this.ensureUser({ userId: order.userId });
-      await this.saveAddress(order.shippingAddress, false);
+      let shippingAddress = order.shippingAddress;
+      if (shippingAddress.userId !== order.userId) shippingAddress = { ...shippingAddress, userId: order.userId };
+      const addressOwner = await database.getFirstAsync<{ user_id: string }>(
+        'SELECT user_id FROM addresses WHERE id = ?',
+        shippingAddress.id,
+      );
+      if (addressOwner && addressOwner.user_id !== order.userId) {
+        shippingAddress = { ...shippingAddress, id: `addr_${order.id}` };
+      }
+      await this.saveAddress(shippingAddress, false);
       await database.runAsync(
         `INSERT INTO orders
           (id, user_id, shipping_address_id, status, sync_status, payment_method, payment_details, currency, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'synced', ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, 'synced', ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET shipping_address_id = excluded.shipping_address_id,
            status = excluded.status, payment_method = excluded.payment_method,
            payment_details = COALESCE(excluded.payment_details, orders.payment_details),
@@ -413,7 +443,7 @@ export class SqliteOrderRepository implements IOrderRepository {
          WHERE orders.sync_status = 'synced'`,
         order.id,
         order.userId,
-        order.shippingAddress.id,
+        shippingAddress.id,
         order.status,
         order.paymentMethod ?? null,
         serializePaymentDetails(order.paymentDetails),

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing, typography } from '@/shared/theme';
 import { useToast } from '@/infrastructure/context/ToastContext';
+import { useModalLayerTop } from './toastLayer';
 
 const ICON_BY_TYPE = {
   success: 'checkmark-circle' as const,
@@ -18,10 +19,13 @@ const COLOR_BY_TYPE = {
 };
 
 
-export function ToastHost() {
+export function ToastHost({ layerId }: { layerId?: number }) {
   const { toast } = useToast();
   const insets = useSafeAreaInsets();
+  const topLayer = useModalLayerTop();
+  const isRootHost = layerId === undefined;
   if (!toast.visible) return null;
+  if (isRootHost ? topLayer !== null : topLayer !== layerId) return null;
 
   const color = COLOR_BY_TYPE[toast.type];
 

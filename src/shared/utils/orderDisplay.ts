@@ -8,12 +8,13 @@ export interface OrderDisplayState {
   tone: OrderDisplayTone;
 }
 
-export function getOrderSyncState(order: Order): OrderSyncState {
+export function getOrderSyncState(order: Order, syncEnabled = true): OrderSyncState {
+  if (!syncEnabled) return 'synced';
   return order.syncStatus === 'pending' || order.syncStatus === 'error' ? order.syncStatus : 'synced';
 }
 
-export function getOrderDisplayState(order: Order): OrderDisplayState {
-  const syncState = getOrderSyncState(order);
+export function getOrderDisplayState(order: Order, syncEnabled = true): OrderDisplayState {
+  const syncState = getOrderSyncState(order, syncEnabled);
   const isCancelled = order.status === 'cancelled';
   if (syncState === 'pending') {
     return isCancelled
@@ -42,11 +43,11 @@ export interface GroupedOrders {
   cancelled: Order[];
 }
 
-export function groupOrders(orders: Order[]): GroupedOrders {
+export function groupOrders(orders: Order[], syncEnabled = true): GroupedOrders {
   const all = [...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const grouped: GroupedOrders = { all, needsAttention: [], active: [], delivered: [], cancelled: [] };
   for (const order of all) {
-    if (getOrderSyncState(order) !== 'synced') grouped.needsAttention.push(order);
+    if (getOrderSyncState(order, syncEnabled) !== 'synced') grouped.needsAttention.push(order);
     else if (order.status === 'delivered') grouped.delivered.push(order);
     else if (order.status === 'cancelled') grouped.cancelled.push(order);
     else grouped.active.push(order);

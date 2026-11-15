@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Redirect, router, useIsFocused } from 'expo-router';
-import { ActivityIndicator, Animated, BackHandler, Easing, Image, Keyboard, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, BackHandler, Easing, Image, Keyboard, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Product, ProductBrand, ProductCategory } from '@/domain/entities/Product';
@@ -13,7 +13,7 @@ import { useCart } from '@/infrastructure/context/CartContext';
 import { useOrders } from '@/infrastructure/context/OrderContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { productRepository } from '@/infrastructure/container';
-import { hasNetworkConnection } from '@/infrastructure/data/firebaseDataSync';
+import { hasNetworkConnection, isExpectedSyncError } from '@/infrastructure/data/firebaseDataSync';
 import { BrandLogo } from '@/presentation/components/BrandLogo';
 import { CatalogFeed, type CatalogInitialFilters } from '@/presentation/components/CatalogFeed';
 import { CartFeed } from '@/presentation/components/CartFeed';
@@ -34,7 +34,7 @@ export function HomeScreen() {
   const isFocused = useIsFocused();
   const { currentUser, isInitializing, logout, updateProfile, deleteAccount } = useAuth();
   const { itemCount, lines: cartLines, addProduct, waitForPendingWrites, forgetAccountCart } = useCart();
-  const { orders, unreadOrderCount, markOrdersRead, forgetUserData } = useOrders();
+  const { orders, unreadOrderCount, markOrdersRead, forgetUserData, orderSyncEnabled } = useOrders();
   const isOnline = useNetworkStatus();
   const { show } = useToast();
   const [showOrderHistory, setShowOrderHistory] = useState(false);
@@ -58,6 +58,7 @@ export function HomeScreen() {
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [openCatalogFilters, setOpenCatalogFilters] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [sessionExitLabel, setSessionExitLabel] = useState('CERRANDO SESIÓN');
   const [logoutFlight] = useState(() => new Animated.Value(0));
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [isSearchSuggestionsVisible, setIsSearchSuggestionsVisible] = useState(false);
@@ -88,6 +89,7 @@ export function HomeScreen() {
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isLoggingOut) return true;
       if (!isFocused) return false;
       if (isSearchMode) {
         setIsSearchMode(false);
@@ -113,7 +115,7 @@ export function HomeScreen() {
       return true;
     });
     return () => subscription.remove();
-  }, [isFocused, isSearchMode, showMyReviews, showOrderHistory, section]);
+  }, [isFocused, isLoggingOut, isSearchMode, showMyReviews, showOrderHistory, section]);
 
   const handleLogout = useCallback(() => {
     if (isLoggingOut) return;
@@ -214,9 +216,11 @@ export function HomeScreen() {
       }
     };
     void (async () => {
+      let localCatalogFailed = false;
       try {
         await loadLocalCatalog();
       } catch (error) {
+        localCatalogFailed = true;
         if (active) show(error instanceof Error ? error.message : 'No se pudo cargar el catálogo local.', 'error');
       }
       try {
@@ -226,9 +230,9 @@ export function HomeScreen() {
           setCatalogFeedKey((key) => key + 1);
         }
       } catch (error) {
-        if (active) {
+        if (active && !localCatalogFailed) {
           void hasNetworkConnection().then((online) => {
-            if (!active || !online) return;
+            if (!active || !online || isExpectedSyncError(error)) return;
             show(error instanceof Error
               ? `Se usará el catálogo local: ${error.message}`
               : 'No se pudo sincronizar el catálogo; se usará la copia local.', 'info');
@@ -240,26 +244,39 @@ export function HomeScreen() {
   }, [show]);
 
   useEffect(() => {
-    if (!isOnline || !currentUser) return;
-    void productRepository.syncPendingReviews(() => {
-      show('No se pudieron publicar las reseñas pendientes; se reintentará automáticamente.', 'info');
+    if (!isOnline || !currentUser?.id) return;
+    let syncError: unknown = null;
+    void productRepository.syncPendingReviews((error) => {
+      syncError ??= error;
     }).then((count) => {
-      if (count > 0) show('Tus reseñas pendientes ya están sincronizadas.', 'success');
+      if (syncError !== null) {
+        if (!isExpectedSyncError(syncError)) {
+          show(
+            count > 0
+              ? 'Algunas reseñas se sincronizaron; las pendientes se reintentarán automáticamente.'
+              : 'No se pudieron publicar las reseñas pendientes; se reintentará automáticamente.',
+            'info',
+          );
+        }
+      } else if (count > 0) {
+        show('Tus reseñas pendientes ya están sincronizadas.', 'success');
+      }
     }).catch(() => {});
-  }, [isOnline, currentUser, show]);
+  }, [isOnline, currentUser?.id, show]);
 
   const { all: userOrders, needsAttention, active: activeOrders, delivered: deliveredOrders, cancelled: cancelledOrders } = useMemo(
-    () => groupOrders(orders),
-    [orders],
+    () => groupOrders(orders, orderSyncEnabled),
+    [orders, orderSyncEnabled],
   );
   const openOrder = (orderId: string) => {
     router.push({ pathname: '/order/[id]', params: { id: orderId } });
   };
 
+  const currentUserId = currentUser?.id ?? null;
   const loadMyReviews = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUserId) return;
     try {
-      const items = await productRepository.listUserReviews(currentUser.id);
+      const items = await productRepository.listUserReviews(currentUserId);
       setMyReviews(items);
       setMyReviewsError(false);
     } catch {
@@ -267,7 +284,7 @@ export function HomeScreen() {
     } finally {
       setMyReviewsLoaded(true);
     }
-  }, [currentUser]);
+  }, [currentUserId]);
 
   const ensureReviewProducts = useCallback(async () => {
     try {
@@ -282,17 +299,24 @@ export function HomeScreen() {
 
   const reviewsSectionVisible = section === 'Perfil' && !showOrderHistory;
   useEffect(() => {
-    if (!currentUser || !reviewsSectionVisible) return;
+    if (!currentUserId || !reviewsSectionVisible) return;
     void loadMyReviews();
     void ensureReviewProducts();
-  }, [currentUser, reviewsSectionVisible, isOnline, loadMyReviews, ensureReviewProducts]);
+  }, [currentUserId, reviewsSectionVisible, isOnline, loadMyReviews, ensureReviewProducts]);
 
   if (isInitializing) {
     return <SafeAreaView style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
       <ActivityIndicator color={colors.primary} />
     </SafeAreaView>;
   }
-  if (!currentUser) return <Redirect href={'/login' as never} />;
+  if (!currentUser) {
+    return isLoggingOut ? (
+      <>
+        <SessionExitOverlay flight={logoutFlight} label={sessionExitLabel} />
+        <Redirect href={'/login' as never} />
+      </>
+    ) : <Redirect href={'/login' as never} />;
+  }
 
   const firstName = currentUser.fullName.trim().split(/\s+/)[0];
   const unreadOrders = unreadOrderCount(currentUser.id);
@@ -488,7 +512,7 @@ export function HomeScreen() {
               <View style={styles.profileAccountDetails}>
                 <Text style={styles.profileAccountHeading}>Datos de tu cuenta</Text>
                 <ProfileDetailRow label="Teléfono" value={`${currentUser.phone.dialCode} ${currentUser.phone.number}`} />
-                <ProfileDetailRow label="Miembro desde" value={new Date(currentUser.createdAt).toLocaleDateString('es-US', { year: 'numeric', month: 'long', day: 'numeric' })} />
+                <ProfileDetailRow label="Miembro desde" value={new Date(currentUser.createdAt).toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' })} />
                 <TouchableOpacity
                   style={styles.profileEditButton}
                   onPress={() => setShowAccountSettings(true)}
@@ -602,34 +626,24 @@ export function HomeScreen() {
           onClose={() => setShowAccountSettings(false)}
           onSave={async (input) => { await updateProfile(input); }}
           onDeleteAccount={async (password) => {
-            await waitForPendingWrites();
-            await deleteAccount(password);
-            forgetAccountCart(currentUser.id);
-            forgetUserData(currentUser.id);
+            logoutFlight.setValue(1);
+            setSessionExitLabel('CUENTA ELIMINADA');
+            setIsLoggingOut(true);
+            try {
+              await waitForPendingWrites();
+              await deleteAccount(password);
+              forgetAccountCart(currentUser.id);
+              forgetUserData(currentUser.id);
+            } catch (error) {
+              setIsLoggingOut(false);
+              setSessionExitLabel('CERRANDO SESIÓN');
+              logoutFlight.setValue(0);
+              throw error;
+            }
           }}
         />
       )}
-      {isLoggingOut && (
-        <Modal visible transparent={false} animationType="none" statusBarTranslucent onRequestClose={() => {}}>
-        <View style={logoutStyles.overlay}>
-          <Animated.View
-            style={{
-              opacity: logoutFlight.interpolate({ inputRange: [0, 0.15, 0.85, 1], outputRange: [0, 1, 1, 1] }),
-              transform: [
-                { translateY: logoutFlight.interpolate({ inputRange: [0, 1], outputRange: [-100, 140] }) },
-                { translateX: logoutFlight.interpolate({ inputRange: [0, 0.5, 1], outputRange: [45, -20, -65] }) },
-                { scale: logoutFlight.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0.7, 1.2, 0.65] }) },
-                { rotate: logoutFlight.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['14deg', '-10deg', '18deg'] }) },
-              ],
-            }}
-          >
-            <MaterialCommunityIcons name="quadcopter" size={100} color={colors.primary} />
-          </Animated.View>
-          <Text style={logoutStyles.label}>CERRANDO SESIÓN</Text>
-          <Text style={logoutStyles.brand}>SkyNova</Text>
-        </View>
-        </Modal>
-      )}
+      {isLoggingOut && <SessionExitOverlay flight={logoutFlight} label={sessionExitLabel} />}
 
     </SafeAreaView>
   );
@@ -644,9 +658,37 @@ function ProfileDetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SessionExitOverlay({ flight, label }: { flight: Animated.Value; label: string }) {
+  return (
+    <View style={logoutStyles.overlay}>
+      <Animated.View
+        style={{
+          opacity: flight.interpolate({ inputRange: [0, 0.15, 0.85, 1], outputRange: [0, 1, 1, 1] }),
+          transform: [
+            { translateY: flight.interpolate({ inputRange: [0, 1], outputRange: [-100, 140] }) },
+            { translateX: flight.interpolate({ inputRange: [0, 0.5, 1], outputRange: [45, -20, -65] }) },
+            { scale: flight.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0.7, 1.2, 0.65] }) },
+            { rotate: flight.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['14deg', '-10deg', '18deg'] }) },
+          ],
+        }}
+      >
+        <MaterialCommunityIcons name="quadcopter" size={100} color={colors.primary} />
+      </Animated.View>
+      <Text style={logoutStyles.label}>{label}</Text>
+      <Text style={logoutStyles.brand}>SkyNova</Text>
+    </View>
+  );
+}
+
 const logoutStyles = StyleSheet.create({
   overlay: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 50,
+    elevation: 50,
     backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
@@ -666,7 +708,8 @@ const ORDER_TONE_STYLES: Record<OrderDisplayTone, { background: object; text: ob
 };
 
 function OrderStateChip({ order }: { order: Order }) {
-  const display = getOrderDisplayState(order);
+  const { orderSyncEnabled } = useOrders();
+  const display = getOrderDisplayState(order, orderSyncEnabled);
   const tone = ORDER_TONE_STYLES[display.tone];
   return (
     <View style={[styles.orderStatusBadge, tone.background]}>
@@ -712,7 +755,7 @@ function OrderSection({
             <OrderStateChip order={order} />
           </View>
           <Text style={styles.orderDate}>
-            {new Date(order.createdAt).toLocaleDateString('es-CO')} · {totalUnits} {totalUnits === 1 ? 'artículo' : 'artículos'}
+            {new Date(order.createdAt).toLocaleDateString('es-PE')} · {totalUnits} {totalUnits === 1 ? 'artículo' : 'artículos'}
           </Text>
           <Text style={styles.orderItemNames} numberOfLines={2}>
             {order.items.map((item) => `${item.productName} ×${item.quantity}`).join(' · ')}
@@ -785,7 +828,7 @@ function MyReviewCard({
           <Text style={styles.reviewProductName} numberOfLines={2}>{review.productName}</Text>
           <View style={styles.reviewMetaRow}>
             <ReviewStars rating={review.rating} />
-            <Text style={styles.reviewDate}>{new Date(review.createdAt).toLocaleDateString('es-CO')}</Text>
+            <Text style={styles.reviewDate}>{new Date(review.createdAt).toLocaleDateString('es-PE')}</Text>
             {review.productPrice !== undefined && (
               <Text style={styles.reviewDate}>{formatCurrency(review.productPrice, review.productCurrency ?? 'USD')}</Text>
             )}

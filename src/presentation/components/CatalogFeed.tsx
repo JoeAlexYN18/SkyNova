@@ -16,8 +16,10 @@ import { productRepository } from '@/infrastructure/container';
 import { ProductListItem, type CatalogEntryOptions } from '@/presentation/components/HomeFeed';
 import { ProductSearchBar } from '@/presentation/components/ProductSearchBar';
 import { ToastHost } from '@/presentation/components/ToastHost';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalLayer } from '@/presentation/components/toastLayer';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
-import { colors } from '@/shared/theme';
+import { colors, spacing } from '@/shared/theme';
 
 export type CatalogInitialFilters = Omit<CatalogEntryOptions, 'openFilters'>;
 
@@ -100,6 +102,8 @@ export function CatalogFeed({
   const [hasError, setHasError] = useState(false);
   const [isFilterVisible, setIsFilterVisible] = useState(openFiltersOnStart);
   const [isSortVisible, setIsSortVisible] = useState(false);
+  const filterLayerId = useModalLayer(isFilterVisible);
+  const insets = useSafeAreaInsets();
   const [reloadKey, setReloadKey] = useState(0);
   const loadMoreRequest = useRef(0);
   const selectedBudgetRange = BUDGET_RANGES.find((range) => range.id === budgetRangeId) ?? BUDGET_RANGES[0];
@@ -521,7 +525,7 @@ export function CatalogFeed({
       <Modal visible={isFilterVisible} transparent animationType="slide" onRequestClose={() => setIsFilterVisible(false)}>
         <View style={styles.filterOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsFilterVisible(false)} accessibilityLabel="Cerrar filtros" />
-          <View style={styles.filterSheet}>
+          <View style={[styles.filterSheet, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}>
             <View style={styles.filterHeader}>
               <View>
                 <Text style={styles.filterTitle}>Filtrar catálogo</Text>
@@ -587,7 +591,7 @@ export function CatalogFeed({
             </TouchableOpacity>
           </View>
         </View>
-        <ToastHost />
+        <ToastHost layerId={filterLayerId} />
       </Modal>
     </>
   );

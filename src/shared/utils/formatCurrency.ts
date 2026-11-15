@@ -1,6 +1,6 @@
 const formatters = new Map<string, Intl.NumberFormat>();
 
-export function formatCurrency(amount: number, currency: string, locale = 'es-CO'): string {
+export function formatCurrency(amount: number, currency: string, locale = 'es-PE'): string {
   const key = `${locale}:${currency}`;
   let formatter = formatters.get(key);
 
