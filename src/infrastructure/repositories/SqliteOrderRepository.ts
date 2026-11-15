@@ -1,3 +1,5 @@
+//Refacto 2
+
 import type { Order, OrderPaymentDetails, ShippingAddressSnapshot } from '@/domain/entities/Order';
 import type { IOrderRepository, NewOrderInput, OrderUpdate } from '@/domain/repositories/IOrderRepository';
 import { getDatabase, withDatabaseTransaction } from '@/infrastructure/data/sqliteDatabase';
@@ -98,12 +100,20 @@ export class SqliteOrderRepository implements IOrderRepository {
        WHERE o.user_id = ? ORDER BY o.created_at DESC`,
       userId,
     );
+    const itemRows = rows.length === 0 ? [] : await database.getAllAsync<OrderItemRow & { order_id: string }>(
+      `SELECT order_id, product_id, product_name, sku, quantity, unit_price
+       FROM order_items WHERE order_id IN (${rows.map(() => '?').join(',')}) ORDER BY id`,
+      ...rows.map((row) => row.id),
+    );
+    const itemsByOrder = new Map<string, OrderItemRow[]>();
+    for (const item of itemRows) {
+      const list = itemsByOrder.get(item.order_id) ?? [];
+      list.push(item);
+      itemsByOrder.set(item.order_id, list);
+    }
     const orders: Order[] = [];
     for (const row of rows) {
-      const itemRows = await database.getAllAsync<OrderItemRow>(
-        'SELECT product_id, product_name, sku, quantity, unit_price FROM order_items WHERE order_id = ? ORDER BY id',
-        row.id,
-      );
+      const rowItems = itemsByOrder.get(row.id) ?? [];
       orders.push({
         id: row.id,
         userId: row.user_id,
@@ -125,7 +135,7 @@ export class SqliteOrderRepository implements IOrderRepository {
         paymentMethod: row.payment_method ?? undefined,
         paymentDetails: parsePaymentDetails(row.payment_details),
         currency: row.currency,
-        items: itemRows.map((item) => ({
+        items: rowItems.map((item) => ({
           productId: item.product_id,
           productName: item.product_name,
           sku: item.sku,
@@ -507,3 +517,4 @@ function validateAddress(address: ShippingAddressSnapshot) {
     throw new Error('Completa los datos de entrega obligatorios.');
   }
 }
+
