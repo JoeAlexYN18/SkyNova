@@ -73,7 +73,7 @@ export async function getCartFromFirebase(userId: string) {
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
   if (!Array.isArray(data.items)) throw new Error('El carrito guardado en Firebase tiene un formato inválido.');
-  return data.items.map((item: unknown) => {
+  const items = data.items.map((item: unknown) => {
     if (
       typeof item !== 'object'
       || item === null
@@ -88,6 +88,10 @@ export async function getCartFromFirebase(userId: string) {
     }
     return { productId: item.productId, quantity: item.quantity };
   });
+  return {
+    items,
+    updatedAt: typeof data.updated_at === 'string' ? data.updated_at : undefined,
+  };
 }
 
 export async function syncAddressToFirebase(address: ShippingAddressSnapshot) {

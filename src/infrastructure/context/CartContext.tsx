@@ -10,7 +10,7 @@ import { productRepository } from '@/infrastructure/container';
 import { useToast } from '@/infrastructure/context/ToastContext';
 
 interface CartLine { product: Product; quantity: number }
-type CartAction = { userId: string; type: 'add'; product: Product } | { userId: string; type: 'remove'; productId: string } | { userId: string; type: 'quantity'; productId: string; quantity: number } | { userId: string; type: 'set'; lines: CartLine[] } | { userId: string; type: 'clear' } | { userId: string; type: 'forget' };
+type CartAction = { userId: string; type: 'add'; product: Product } | { userId: string; type: 'remove'; productId: string } | { userId: string; type: 'quantity'; productId: string; quantity: number } | { userId: string; type: 'set'; lines: CartLine[] } | { userId: string; type: 'hydrate'; lines: CartLine[] } | { userId: string; type: 'clear' } | { userId: string; type: 'forget' };
 
 function cartReducer(state: Record<string, CartLine[]>, action: CartAction): Record<string, CartLine[]> {
   if (action.type === 'forget') {
@@ -20,6 +20,14 @@ function cartReducer(state: Record<string, CartLine[]>, action: CartAction): Rec
   }
   const lines = state[action.userId] ?? [];
   if (action.type === 'set') return { ...state, [action.userId]: action.lines };
+  if (action.type === 'hydrate') {
+    const current = state[action.userId] ?? [];
+    const merged = [...current];
+    for (const line of action.lines) {
+      if (!merged.some((existing) => existing.product.id === line.product.id)) merged.push(line);
+    }
+    return { ...state, [action.userId]: merged };
+  }
   if (action.type === 'remove') return { ...state, [action.userId]: lines.filter((line) => line.product.id !== action.productId) };
   if (action.type === 'clear') return { ...state, [action.userId]: [] };
   if (action.type === 'quantity') return { ...state, [action.userId]: lines.flatMap((line) => {
@@ -81,10 +89,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const products = await productRepository.listProducts({ page: 1, pageSize: 1000 });
         await cacheUserProfile(currentUser);
         const database = await getDatabase();
-        const cart = await database.getFirstAsync<{ id: string }>(
-          'SELECT id FROM carts WHERE user_id = ?',
+        const cart = await database.getFirstAsync<{ id: string; updated_at: string }>(
+          'SELECT id, updated_at FROM carts WHERE user_id = ?',
           currentUser.id,
         );
+        const localCartUpdatedAt = cart?.updated_at ?? '';
         if (!cart) {
           await database.runAsync(
             'INSERT INTO carts (id, user_id) VALUES (?, ?)',
@@ -107,8 +116,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         try {
           const remoteCart = await getCartFromFirebase(currentUser.id);
           cloudReadyUsers.current.add(currentUser.id);
-          if (remoteCart) {
-            persistedLines = remoteCart.flatMap(({ productId, quantity }) => {
+          const localIsNewer = remoteCart !== null
+            && remoteCart.updatedAt !== undefined
+            && localCartUpdatedAt !== ''
+            && localCartUpdatedAt > remoteCart.updatedAt;
+          if (remoteCart && !localIsNewer) {
+            persistedLines = remoteCart.items.flatMap(({ productId, quantity }) => {
               const product = byId.get(productId);
               if (!product) return [];
               const safeQuantity = Math.min(quantity, product.stockQuantity);
@@ -150,7 +163,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
         if (!active) return;
         hydratedUsers.current.add(currentUser.id);
-        dispatch({ type: 'set', userId: currentUser.id, lines: persistedLines });
+        dispatch({ type: 'hydrate', userId: currentUser.id, lines: persistedLines });
       } catch (error) {
         if (active && !isAuthSessionError(error, currentUser.id) && !isFirebaseNetworkError(error)) {
           show('No se pudo cargar el carrito guardado.', 'error');
