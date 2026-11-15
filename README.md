@@ -12,7 +12,7 @@ El core es el comercio electrónico B2C de un proveedor especializado: conectar 
 
 ## 3. Requisitos
 
-- **Node.js 22.13 o superior** y npm.
+- **Node.js 20.19 o superior** y npm (se recomienda la LTS más reciente).
 - **Android:** Android Studio, Android SDK y JDK 17 para compilar el APK localmente.
 - **iOS:** macOS y Xcode compatible con Expo SDK 58. La compilación local para iOS no está disponible en Windows.
 - Para probar en un teléfono físico sin compilar, instala **Expo Go**; en ese caso no necesitas Android Studio ni JDK.
@@ -30,7 +30,7 @@ No hace falta instalar React Native CLI globalmente. Sin configuración de Fireb
 ## 5. Configuración de Firebase
 
 1. Crea un proyecto y una aplicación web en [Firebase Console](https://console.firebase.google.com); activa **Authentication → Email/Password** y crea la base de datos **Firestore**.
-2. Crea un archivo `.env` en la raíz del proyecto con las credenciales públicas de la app web (nunca incluyas una cuenta de servicio):
+2. Crea un archivo `.env` en la raíz del proyecto con las credenciales públicas de la app web (nunca incluyas una cuenta de servicio; `.env` está en `.gitignore`, no se sube a GitHub):
 
 ```env
 EXPO_PUBLIC_FIREBASE_API_KEY=...
@@ -80,7 +80,7 @@ El CRUD visible para el usuario es el de **pedidos** (crear, consultar, actualiz
 4. Edita y guarda la dirección de entrega mientras el pedido esté pendiente o pagado para **actualizarlo**.
 5. **Cancela** el pedido desde su detalle: queda marcado como cancelado y sigue en el historial (borrado lógico). El stock se repone en el catálogo.
 
-También puedes **crear/editar/eliminar reseñas** en el detalle de cada producto y gestionarlas en **Perfil → Mis reseñas**; y **editar tu perfil** (nombre, correo, teléfono, contraseña) desde **Ajustes de cuenta**.
+También puedes **crear/editar/eliminar reseñas** en el detalle de cada producto y gestionarlas en **Perfil → Mis reseñas**; y **editar tu perfil** (nombre, correo, teléfono, contraseña) desde **Perfil → Datos de tu cuenta**.
 
 ## 9. Cómo probar SQLite
 
@@ -119,7 +119,7 @@ Firestore es el destino de sincronización (no hay Realtime Database en el proye
 
 - **Auth:** los usuarios aparecen en Authentication → Users; el perfil se guarda en `users/{uid}`.
 - **Catálogo:** `categories`, `products`, `drone_specs`, `product_images` son de solo lectura para el cliente.
-- **Pedidos:** `orders/{orderId}` con `items` y `shipping_address`; el estado pasa de `pending` a `paid` y luego `cancelled` si se cancela.
+- **Pedidos:** `orders/{orderId}` con `items` y `shipping_address`; se crean como `paid` (pago simulado, sin cobro real) y pueden pasar a `cancelled`.
 - **Reseñas:** `product_reviews/{productId}_{userId}` — una por usuario y producto.
 - **Carrito:** `carts/{userId}` con los items y `updated_at`.
 - **Direcciones:** `addresses/{addressId}`; la última usada queda como `is_default`.
@@ -128,9 +128,10 @@ Para verificar: crea un pedido online, abre Firestore Console → colección `or
 
 ## 12. Cómo generar el binario y ejecutar en dispositivo/emulador
 
-**Android** — el proyecto incluye la carpeta `android/` generada, así que puedes compilar directo con Gradle:
+**Android** — la carpeta `android/` no se sube al repositorio (la genera Expo), así que primero créala con prebuild y luego compila con Gradle:
 
 ```powershell
+npx expo prebuild --platform android   # genera android/ (solo la primera vez)
 cd android
 .\gradlew.bat assembleDebug     # APK de desarrollo (~230 MB, necesita Metro)
 .\gradlew.bat assembleRelease   # APK release (~ligero, funciona solo)
