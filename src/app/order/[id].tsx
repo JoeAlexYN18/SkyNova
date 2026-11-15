@@ -1,11 +1,13 @@
+// Refacto 1
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import * as Network from 'expo-network';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { CardBrand, CheckoutInput, Order } from '@/domain/entities/Order';
 import { COUNTRIES } from '@/infrastructure/data/countries';
+import { hasNetworkConnection } from '@/infrastructure/data/firebaseDataSync';
 import { productRepository } from '@/infrastructure/container';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useOrders } from '@/infrastructure/context/OrderContext';
@@ -136,10 +138,7 @@ export default function OrderDetailScreen() {
     setAddress((current) => (current ? { ...current, [key]: value } : current));
   };
 
-  const isOfflineNow = async () => {
-    const state = await Network.getNetworkStateAsync().catch(() => null);
-    return !!state && !(state.isConnected && state.isInternetReachable !== false);
-  };
+  const isOfflineNow = async () => !(await hasNetworkConnection());
 
   const handleSaveAddress = async () => {
     if (!order || !address || !canSaveAddress) {
