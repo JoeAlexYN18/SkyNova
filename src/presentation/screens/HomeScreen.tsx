@@ -1,7 +1,7 @@
 // Improvement 11
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Redirect, router } from 'expo-router';
+import { Redirect, router, useIsFocused } from 'expo-router';
 import { ActivityIndicator, Animated, BackHandler, Easing, Image, Keyboard, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +31,7 @@ import { getOrderDisplayState, groupOrders, type OrderDisplayTone } from '@/shar
 type Section = 'Inicio' | 'Catálogo' | 'Carrito' | 'Perfil';
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const { currentUser, isInitializing, logout, updateProfile, deleteAccount } = useAuth();
   const { itemCount, lines: cartLines, addProduct, waitForPendingWrites, forgetAccountCart } = useCart();
   const { orders, unreadOrderCount, markOrdersRead, forgetUserData } = useOrders();
@@ -87,6 +88,7 @@ export function HomeScreen() {
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!isFocused) return false;
       if (isSearchMode) {
         setIsSearchMode(false);
         setIsSearchSuggestionsVisible(false);
@@ -94,11 +96,24 @@ export function HomeScreen() {
         Keyboard.dismiss();
         return true;
       }
+      if (showMyReviews) {
+        setShowMyReviews(false);
+        return true;
+      }
+      if (showOrderHistory) {
+        setShowOrderHistory(false);
+        return true;
+      }
+      if (section !== 'Inicio') {
+        setSection('Inicio');
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        return true;
+      }
       BackHandler.exitApp();
       return true;
     });
     return () => subscription.remove();
-  }, [isSearchMode]);
+  }, [isFocused, isSearchMode, showMyReviews, showOrderHistory, section]);
 
   const handleLogout = useCallback(() => {
     if (isLoggingOut) return;

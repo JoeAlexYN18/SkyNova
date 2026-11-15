@@ -94,7 +94,7 @@ export function ForgotPasswordScreen() {
             <TextField
               label="Correo electrónico"
               icon="person"
-              placeholder="nombre@dominio.com"
+              placeholder="nombre@dominio.extensión"
               value={identifier}
               onChangeText={(value) => { setIdentifier(value); setErrors((current) => ({ ...current, identifier: '' })); }}
               error={errors.identifier}

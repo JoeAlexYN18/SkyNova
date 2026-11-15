@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Country } from '@/domain/entities/Country';
+import { ToastHost } from '@/presentation/components/ToastHost';
 import { colors, radius, spacing, typography } from '@/shared/theme';
 
 interface CountryPickerModalProps {
@@ -99,6 +100,7 @@ export function CountryPickerModal({
             />
           )}
         </View>
+        <ToastHost />
       </View>
     </Modal>
   );

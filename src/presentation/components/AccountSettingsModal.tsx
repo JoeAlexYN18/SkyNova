@@ -24,6 +24,7 @@ import { PasswordField } from '@/presentation/components/PasswordField';
 import { PhoneField } from '@/presentation/components/PhoneField';
 import { PrimaryButton } from '@/presentation/components/PrimaryButton';
 import { TextField } from '@/presentation/components/TextField';
+import { ToastHost } from '@/presentation/components/ToastHost';
 import { colors, radius, spacing } from '@/shared/theme';
 import {
   validateConfirmPassword,
@@ -186,7 +187,7 @@ export function AccountSettingsModal({
             </View>
             <View style={styles.formCard}>
               <TextField label="Nombre completo" icon="person" placeholder="Tu nombre y apellido" value={values.fullName} onChangeText={(text) => setField('fullName', text)} error={errors.fullName} autoCapitalize="words" autoComplete="name" />
-              <TextField label="Correo electrónico" icon="mail" placeholder="nombre@dominio.com" value={values.email} onChangeText={(text) => setField('email', text)} error={errors.email} keyboardType="email-address" autoComplete="email" />
+              <TextField label="Correo electrónico" icon="mail" placeholder="nombre@dominio.extensión" value={values.email} onChangeText={(text) => setField('email', text)} error={errors.email} keyboardType="email-address" autoComplete="email" />
               <PhoneField country={country} onPressCountry={() => setIsCountryPickerVisible(true)} number={values.phoneNumber} onChangeNumber={(text) => setField('phoneNumber', text)} error={errors.phoneNumber} />
 
               {(values.email.trim().toLowerCase() !== user.email.toLowerCase() || isPasswordSectionOpen) && (
@@ -303,6 +304,7 @@ export function AccountSettingsModal({
           isLoading={false}
           selectedCode={country.code}
         />
+        <ToastHost />
       </SafeAreaView>
     </Modal>
   );

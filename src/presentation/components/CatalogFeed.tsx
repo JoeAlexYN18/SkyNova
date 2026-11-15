@@ -15,6 +15,7 @@ import type { ProductPage, ProductSort } from '@/domain/repositories/IProductRep
 import { productRepository } from '@/infrastructure/container';
 import { ProductListItem, type CatalogEntryOptions } from '@/presentation/components/HomeFeed';
 import { ProductSearchBar } from '@/presentation/components/ProductSearchBar';
+import { ToastHost } from '@/presentation/components/ToastHost';
 import { styles } from '@/presentation/screens/HomeScreen.styles';
 import { colors } from '@/shared/theme';
 
@@ -586,6 +587,7 @@ export function CatalogFeed({
             </TouchableOpacity>
           </View>
         </View>
+        <ToastHost />
       </Modal>
     </>
   );

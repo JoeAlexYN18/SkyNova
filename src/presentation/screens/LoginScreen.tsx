@@ -106,7 +106,7 @@ export function LoginScreen() {
               <TextField
                 label="Correo electrónico"
                 icon="person"
-                placeholder="nombre@dominio.com"
+                placeholder="nombre@dominio.extensión"
                 value={state.identifier}
                 onChangeText={setIdentifier}
                 error={state.errors.identifier}

@@ -8,6 +8,7 @@ import { productRepository } from '@/infrastructure/container';
 import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { useNetworkStatus } from '@/presentation/hooks/useNetworkStatus';
+import { ToastHost } from '@/presentation/components/ToastHost';
 
 interface Props {
   product: Product | null;
@@ -25,6 +26,7 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
   const [rating, setRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const reviewSubmitLock = useRef(false);
   const [isDeletingReview, setIsDeletingReview] = useState(false);
   const previousOwnSync = useRef<{ productId?: string; sync?: string }>({});
   const isOnline = useNetworkStatus();
@@ -99,6 +101,7 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
   const reviewCount = reviewsLoaded ? reviews.length : product.ratingCount ?? 0;
 
   const submitReview = async () => {
+    if (reviewSubmitLock.current) return;
     if (!currentUser) {
       show('Inicia sesión para dejar una reseña.', 'info');
       return;
@@ -107,6 +110,7 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
       show('Selecciona una calificación de 1 a 5 estrellas.', 'error');
       return;
     }
+    reviewSubmitLock.current = true;
     setIsSubmittingReview(true);
     try {
       const saved = await productRepository.saveReview({
@@ -128,6 +132,7 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
     } catch (error) {
       show(error instanceof Error ? error.message : 'No se pudo guardar la reseña.', 'error');
     } finally {
+      reviewSubmitLock.current = false;
       setIsSubmittingReview(false);
     }
   };
@@ -343,6 +348,7 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
             </TouchableOpacity>
           </View>
         </View>
+        <ToastHost />
       </View>
     </Modal>
   );

@@ -3,6 +3,7 @@ import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BrandLogo } from '@/presentation/components/BrandLogo';
+import { ToastHost } from '@/presentation/components/ToastHost';
 import { colors, radius, spacing } from '@/shared/theme';
 
 export function AboutSkyNovaModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -43,6 +44,7 @@ export function AboutSkyNovaModal({ visible, onClose }: { visible: boolean; onCl
           </View>
           <Text style={styles.location}>Estados Unidos</Text>
         </ScrollView>
+        <ToastHost />
       </SafeAreaView>
     </Modal>
   );

@@ -13,6 +13,7 @@ import type { Country } from '@/domain/entities/Country';
 import type { Product } from '@/domain/entities/Product';
 import { COUNTRIES } from '@/infrastructure/data/countries';
 import { useNetworkStatus } from '@/presentation/hooks/useNetworkStatus';
+import { ToastHost } from '@/presentation/components/ToastHost';
 import { colors } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import {
@@ -504,6 +505,11 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
                 </TouchableOpacity>
               ))}
             </View>
+            <Text style={styles.checkoutPaymentNote}>
+              {effectivePaymentMethod === 'yape'
+                ? 'El monto se convertirá a soles (PEN) según el tipo de cambio vigente de tu billetera al momento del pago.'
+                : 'Tu banco aplicará el tipo de cambio de su red al momento del cargo.'}
+            </Text>
             {effectivePaymentMethod === 'yape' ? (
               <View style={styles.checkoutField}>
                 <Text style={styles.checkoutLabel}>Número de Yape</Text>
@@ -613,6 +619,7 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
         </ScrollView>
       </View></View>
       )}
+      <ToastHost />
     </Modal>
   </View>;
 }

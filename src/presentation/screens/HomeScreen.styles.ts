@@ -246,6 +246,7 @@ export const styles = StyleSheet.create({
   checkoutPaymentCopy: { flex: 1 },
   checkoutPaymentName: { color: colors.textPrimary, fontSize: 13, fontWeight: '800' },
   checkoutPaymentDescription: { color: colors.textMuted, fontSize: 11, marginTop: 3 },
+  checkoutPaymentNote: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: spacing.xs },
   orderCompleteOverlay: { flex: 1, justifyContent: 'center', padding: spacing.lg, backgroundColor: colors.overlay },
   orderCompleteCard: { alignItems: 'center', padding: spacing.xl, borderRadius: radius.xl, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   orderCompleteIcon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.success },
