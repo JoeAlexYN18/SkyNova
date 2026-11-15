@@ -127,7 +127,7 @@ export async function syncAddressToFirebase(address: ShippingAddressSnapshot) {
   await batch.commit();
 }
 
-export async function syncOrderToFirebase(order: Order, receiptStoragePath = order.receiptStoragePath) {
+export async function syncOrderToFirebase(order: Order) {
   if (!firebaseConfigured) return;
   requireFirebaseUser(order.userId);
   const firestore = getFirebaseFirestore();
@@ -150,7 +150,6 @@ export async function syncOrderToFirebase(order: Order, receiptStoragePath = ord
     currency: order.currency,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
-    ...(receiptStoragePath ? { receipt_storage_path: receiptStoragePath } : {}),
     items: order.items.map((item) => ({
       product_id: item.productId,
       product_name: item.productName,
@@ -332,7 +331,6 @@ export async function getOrdersFromFirebase(userId: string): Promise<Order[]> {
       currency: data.currency,
       items,
       syncStatus: 'synced',
-      receiptStoragePath: typeof data.receipt_storage_path === 'string' ? data.receipt_storage_path : undefined,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };

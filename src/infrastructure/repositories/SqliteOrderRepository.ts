@@ -21,7 +21,6 @@ type OrderRow = {
   status: Order['status'];
   sync_status: NonNullable<Order['syncStatus']>;
   sync_error: string | null;
-  receipt_storage_path: string | null;
   payment_method: Order['paymentMethod'] | null;
   payment_details: string | null;
   currency: string;
@@ -131,7 +130,6 @@ export class SqliteOrderRepository implements IOrderRepository {
         status: row.status,
         syncStatus: row.sync_status,
         syncError: row.sync_error ?? undefined,
-        receiptStoragePath: row.receipt_storage_path ?? undefined,
         paymentMethod: row.payment_method ?? undefined,
         paymentDetails: parsePaymentDetails(row.payment_details),
         currency: row.currency,
@@ -230,11 +228,10 @@ export class SqliteOrderRepository implements IOrderRepository {
     return cancelled;
   }
 
-  async markOrderSynced(orderId: string, userId: string, updatedAt: string, receiptStoragePath?: string) {
+  async markOrderSynced(orderId: string, userId: string, updatedAt: string) {
     const database = await getDatabase();
     await database.runAsync(
-      "UPDATE orders SET sync_status = 'synced', sync_error = NULL, receipt_storage_path = COALESCE(?, receipt_storage_path) WHERE id = ? AND user_id = ? AND updated_at = ?",
-      receiptStoragePath ?? null,
+      "UPDATE orders SET sync_status = 'synced', sync_error = NULL WHERE id = ? AND user_id = ? AND updated_at = ?",
       orderId,
       userId,
       updatedAt,
@@ -406,13 +403,13 @@ export class SqliteOrderRepository implements IOrderRepository {
       await this.saveAddress(order.shippingAddress, false);
       await database.runAsync(
         `INSERT INTO orders
-          (id, user_id, shipping_address_id, status, sync_status, payment_method, payment_details, currency, receipt_storage_path, created_at, updated_at)
+          (id, user_id, shipping_address_id, status, sync_status, payment_method, payment_details, currency, created_at, updated_at)
          VALUES (?, ?, ?, ?, 'synced', ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET shipping_address_id = excluded.shipping_address_id,
            status = excluded.status, payment_method = excluded.payment_method,
            payment_details = COALESCE(excluded.payment_details, orders.payment_details),
            currency = excluded.currency, updated_at = excluded.updated_at,
-           sync_status = 'synced', sync_error = NULL, receipt_storage_path = excluded.receipt_storage_path
+           sync_status = 'synced', sync_error = NULL
          WHERE orders.sync_status = 'synced'`,
         order.id,
         order.userId,
@@ -421,7 +418,6 @@ export class SqliteOrderRepository implements IOrderRepository {
         order.paymentMethod ?? null,
         serializePaymentDetails(order.paymentDetails),
         order.currency,
-        order.receiptStoragePath ?? null,
         order.createdAt,
         order.updatedAt,
       );

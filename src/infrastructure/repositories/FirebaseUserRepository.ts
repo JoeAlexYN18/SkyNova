@@ -24,17 +24,14 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { deleteObject, ref } from 'firebase/storage';
 import type { NewUserInput, UpdateUserProfileInput, User } from '@/domain/entities/User';
 import type { AuthenticationResult, IUserRepository } from '@/domain/repositories/IUserRepository';
 import { EmailAlreadyRegisteredError } from '@/domain/errors/UserErrors';
 import { cacheUserProfile, getCachedUserProfile } from '@/infrastructure/data/sqliteDatabase';
 import { hasNetworkConnection, isFirebaseNetworkError } from '@/infrastructure/data/firebaseDataSync';
 import {
-  firebaseStorageConfigured,
   getFirebaseAuth,
   getFirebaseFirestore,
-  getFirebaseStorage,
 } from '@/infrastructure/data/firebaseServices';
 
 type UserProfile = {
@@ -201,8 +198,6 @@ export class FirebaseUserRepository implements IUserRepository {
         getDocs(query(collection(firestore, 'product_reviews'), where('user_id', '==', userId))),
         getDoc(doc(firestore, 'carts', userId)),
       ]);
-      await deleteUserReceipts(userId, orderSnapshots.docs);
-
       const ownedDocuments = [
         ...addressSnapshots.docs,
         ...orderSnapshots.docs,
@@ -338,26 +333,6 @@ export class FirebaseUserRepository implements IUserRepository {
       createdAt: profile.created_at,
     };
   }
-}
-
-async function deleteUserReceipts(
-  userId: string,
-  orderDocuments: { get(field: string): unknown }[],
-) {
-  if (!firebaseStorageConfigured) return;
-  const storage = getFirebaseStorage();
-  const receiptPaths = new Set(
-    orderDocuments
-      .map((order) => order.get('receipt_storage_path'))
-      .filter((path): path is string => typeof path === 'string' && path.startsWith(`receipts/${userId}/`)),
-  );
-  await Promise.all([...receiptPaths].map(async (path) => {
-    try {
-      await deleteObject(ref(storage, path));
-    } catch {
-      // La limpieza de comprobantes es de mejor esfuerzo; no debe impedir eliminar la cuenta.
-    }
-  }));
 }
 
 async function writeProfileChange(

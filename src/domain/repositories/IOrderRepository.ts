@@ -32,6 +32,6 @@ export interface IOrderRepository {
   checkout(input: NewOrderInput): Promise<Order>;
   update(orderId: string, userId: string, changes: OrderUpdate): Promise<Order>;
   delete(orderId: string, userId: string): Promise<Order>;
-  markOrderSynced(orderId: string, userId: string, updatedAt: string, receiptStoragePath?: string): Promise<void>;
+  markOrderSynced(orderId: string, userId: string, updatedAt: string): Promise<void>;
   markOrderSyncError(orderId: string, userId: string, message: string): Promise<void>;
 }

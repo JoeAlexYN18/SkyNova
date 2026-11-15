@@ -1,14 +1,12 @@
 import { FirebaseError, initializeApp, getApps, type FirebaseOptions } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
-import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import { initializeFirestore, getFirestore, type Firestore } from 'firebase/firestore';
 import { initializePlatformAuth } from './firebaseAuthPersistence';
 
 const config: FirebaseOptions = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
@@ -18,9 +16,6 @@ export const firebaseConfigured = requiredConfig.every((value) => typeof value =
 
 let authInstance: Auth | undefined;
 let firestoreInstance: Firestore | undefined;
-let storageInstance: FirebaseStorage | undefined;
-export const firebaseStorageConfigured =
-  typeof config.storageBucket === 'string' && config.storageBucket.length > 0;
 
 function getApp() {
   if (!firebaseConfigured) {
@@ -42,14 +37,14 @@ export function getFirebaseAuth() {
 }
 
 export function getFirebaseFirestore() {
-  if (!firestoreInstance) firestoreInstance = getFirestore(getApp());
+  if (!firestoreInstance) {
+    const app = getApp();
+    try {
+      firestoreInstance = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+    } catch {
+      firestoreInstance = getFirestore(app);
+    }
+  }
   return firestoreInstance;
 }
 
-export function getFirebaseStorage() {
-  if (!firebaseStorageConfigured) {
-    throw new Error('Configura el bucket de Firebase Storage para adjuntar comprobantes.');
-  }
-  if (!storageInstance) storageInstance = getStorage(getApp());
-  return storageInstance;
-}

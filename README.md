@@ -13,9 +13,9 @@ El core es el comercio electrónico B2C de un proveedor especializado: conectar 
 ## 3. Requisitos
 
 - **Node.js 22.13 o superior** y npm.
-- **Android:** Android Studio, Android SDK (plataforma 37 para la compilación local) y JDK 17, recomendado para React Native.
+- **Android:** Android Studio, Android SDK y JDK 17 para compilar el APK localmente.
 - **iOS:** macOS y Xcode compatible con Expo SDK 58. La compilación local para iOS no está disponible en Windows.
-- Para probar en un teléfono físico sin compilar localmente, instala **Expo Go**; en ese caso no necesitas Android Studio, JDK ni Xcode.
+- Para probar en un teléfono físico sin compilar, instala **Expo Go**; en ese caso no necesitas Android Studio ni JDK.
 
 ## 4. Instalación
 
@@ -25,73 +25,151 @@ Desde la carpeta del proyecto —donde está `package.json`— instala las depen
 npm install
 ```
 
-No hace falta instalar React Native CLI globalmente. Sin configuración de Firebase, el prototipo conserva el modo de demostración y usa SQLite local.
+No hace falta instalar React Native CLI globalmente. Sin configuración de Firebase, el prototipo conserva el modo de demostración con datos locales.
 
-### Conectar Firebase
+## 5. Configuración de Firebase
 
-1. Crea un proyecto y una aplicación web en Firebase; activa **Authentication → Email/Password** y crea Firestore.
-2. Crea/habilita el bucket de **Storage** en la consola. La consola puede exigir activar el plan Blaze y asociar facturación; revisa costos y condiciones antes de aceptarlo. El código no cambia tu plan.
-3. Copia `.env.skynova` como `.env` y completa la configuración de la aplicación web, incluido `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` con el nombre exacto del bucket. Estas variables `EXPO_PUBLIC_*` son configuración pública del cliente, no claves administrativas. Expo lee `.env`; nunca incluyas una cuenta de servicio en la app.
-4. Después de verificar las reglas, publícalas manualmente con `firebase deploy --only firestore:rules,storage` (usa `firebase.json`) o pégalas en Firebase Console. Este repositorio no las despliega automáticamente.
-5. Reinicia Expo después de cambiar `.env`. El registro, inicio/cierre de sesión y recuperación de contraseña usan Firebase Authentication; los pedidos se cachean en SQLite y se sincronizan en segundo plano con Firebase al recuperar conexión. Los IDs estables hacen que reintentar un envío no cree otro pedido.
+1. Crea un proyecto y una aplicación web en [Firebase Console](https://console.firebase.google.com); activa **Authentication → Email/Password** y crea la base de datos **Firestore**.
+2. Crea un archivo `.env` en la raíz del proyecto con las credenciales públicas de la app web (nunca incluyas una cuenta de servicio):
 
-Los comprobantes son opcionales: se guardan primero en el dispositivo y se suben a `receipts/{uid}/{orderId}/` cuando hay conexión, bucket y sesión válidos. Se aceptan imágenes JPG, PNG, WebP o HEIC de hasta 5 MB; `storage.rules` limita acceso al propietario. No se pueden sincronizar hasta habilitar/configurar Storage y publicar las reglas.
-
-### Servicio REST de demostración
-
-Para probar el consumo REST del catálogo y la sincronización idempotente de pedidos, ejecuta en otra terminal:
-
-```bash
-npm run mock:api
+```env
+EXPO_PUBLIC_FIREBASE_API_KEY=...
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+EXPO_PUBLIC_FIREBASE_APP_ID=...
 ```
 
-Configura `EXPO_PUBLIC_SKYNOVA_API_URL` en `.env` con `http://localhost:8787` para web, `http://10.0.2.2:8787` para el emulador Android o `http://<IP-LAN-del-equipo>:8787` para un dispositivo físico; reinicia Expo después. El servidor expone `GET /catalog` y `PUT /orders/{id}`. Es solo un mock local de desarrollo, sin autenticación ni garantías de producción; no lo expongas a Internet ni lo uses con datos reales. Sin esa variable, la app usa el catálogo local/Firebase. La cola de pedidos continúa en SQLite aunque el servicio REST no esté disponible.
+3. Publica las reglas de seguridad: pega `firestore.rules` en Firebase Console (Firestore → Rules) o usa `firebase deploy --only firestore:rules` si tienes Firebase CLI.
+4. Reinicia Expo después de cambiar `.env`.
 
-El catálogo de demostración se siembra en SQLite para el primer uso y como respaldo offline. Si Firestore tiene productos cargados desde un entorno administrativo, la app descarga `categories`, `products`, `drone_specs`, `product_images` y reseñas, y actualiza la caché SQLite; no se permite editar el catálogo desde el cliente. Las reseñas usan `product_reviews/{productId}_{userId}`; el carrito usa `carts/{userId}`; direcciones y pedidos se guardan en `addresses/{addressId}` y `orders/{orderId}`. No guardes contraseñas en Firestore/SQLite ni incluyas una cuenta de servicio en la app.
+## 6. Cómo ejecutar el proyecto
 
-## 5. Ejecución
-
-La aplicación usa **Expo SDK 58**, React Native y Expo Router. Para iniciar el servidor de desarrollo:
+La aplicación usa **Expo SDK 58**, React Native y Expo Router.
 
 ```bash
 npx expo start
 ```
 
-Escanea el QR con Expo Go o abre un emulador Android y pulsa `a` en la terminal. También puedes iniciar directamente en Android con `npx expo start --android`; en macOS, usa `npx expo start --ios` para el simulador.
-
-Para compilar e instalar una aplicación nativa localmente:
+Escanea el QR con Expo Go o abre un emulador/simulador y pulsa `a` (Android) o `i` (iOS) en la terminal. Para desarrollo nativo local:
 
 ```bash
-npx expo run:android
-npx expo run:ios
+npx expo run:android   # Android — requiere Android Studio/JDK
+npx expo run:ios       # iOS — requiere macOS con Xcode
 ```
 
-Estos comandos requieren Android Studio/JDK o Xcode, según la plataforma. Este repositorio no incluye las carpetas nativas `android/` ni `ios/`, así que `npx react-native run-android` y `npx react-native run-ios` no son los comandos adecuados para iniciarlo. En Windows no es posible compilar localmente la versión de iOS.
+En Windows no es posible compilar localmente la versión de iOS; usa Expo Go, un simulador en una Mac o EAS Build.
 
-## 6. Cómo probar el flujo CRUD de pedidos
+El catálogo de demostración se siembra en SQLite para el primer uso y como respaldo offline. Si Firestore tiene productos cargados desde un entorno administrativo, la app los descarga (`categories`, `products`, `drone_specs`, `product_images`, reseñas) y actualiza la caché; el catálogo no se edita desde el cliente. Las reseñas usan `product_reviews/{productId}_{userId}`; el carrito usa `carts/{userId}`; direcciones y pedidos se guardan en `addresses/{addressId}` y `orders/{orderId}`.
 
-1. Inicia la app e ingresa con la cuenta de demostración que ya aparece en **Login**, o crea una cuenta desde **Registro**.
-2. En **Catálogo**, escribe para ver sugerencias de productos, marcas y categorías; confirma la búsqueda con el botón o la tecla **Buscar** para actualizar los resultados. También puedes abrir una sugerencia directamente.
-3. En **Carrito**, cambia cantidades o elimina artículos. Luego completa los datos de entrega y confirma la compra para **crear** el pedido. El formulario pide teléfono nacional, sin anteponer el código del país.
-4. En **Perfil → Mis pedidos**, abre el pedido para **consultar** su estado, artículos, total y dirección.
-5. Edita y guarda la dirección de entrega mientras el pedido esté pendiente o pagado para **actualizarlo**.
-6. **Cancela** el pedido desde su detalle: queda marcado como cancelado y sigue disponible en el historial (borrado lógico, no eliminación definitiva).
+## 7. Cómo probar el login
 
-En el checkout de demostración se puede elegir Yape o Visa; la preferencia queda guardada en SQLite y Firestore y se muestra en el detalle. Al confirmar, el flujo marca el pedido como `paid` para demostrar el recorrido de compra. No hay integración con una pasarela ni se realiza un cobro real; nunca se solicitan credenciales ni datos de tarjeta. El flujo permite consultar, actualizar y cancelar pedidos.
+1. Abre la app y verás la pantalla de **Login**. Si ya tienes cuenta en Firebase Authentication, ingresa correo y contraseña.
+2. Para crear una cuenta, ve a **Registro**, completa nombre, correo, país, teléfono y contraseña, y acepta los términos.
+3. La recuperación de contraseña está en **¿Olvidaste tu contraseña?**: Firebase envía un correo con el enlace de restablecimiento.
+4. Prueba los casos: credenciales incorrectas (error en el campo), correo duplicado al registrarse, y login sin conexión (usa el perfil cacheado en SQLite si ya iniciaste antes).
+5. En Firebase Console → **Authentication → Users** verifica que cada registro/login aparezca como usuario.
 
-## 7. Arquitectura: Clean Architecture
+## 8. Cómo probar el CRUD
+
+El CRUD visible para el usuario es el de **pedidos** (crear, consultar, actualizar, cancelar):
+
+1. En **Catálogo** busca productos, abre uno y agrégalo al **Carrito**.
+2. En el carrito ajusta cantidades, completa la dirección de entrega, elige **Yape** o **Visa** (ambos son simulados, sin cobro real) y confirma la compra para **crear** el pedido.
+3. En **Perfil → Mis pedidos**, abre el pedido para **consultar** estado, artículos, total y dirección.
+4. Edita y guarda la dirección de entrega mientras el pedido esté pendiente o pagado para **actualizarlo**.
+5. **Cancela** el pedido desde su detalle: queda marcado como cancelado y sigue en el historial (borrado lógico). El stock se repone en el catálogo.
+
+También puedes **crear/editar/eliminar reseñas** en el detalle de cada producto y gestionarlas en **Perfil → Mis reseñas**; y **editar tu perfil** (nombre, correo, teléfono, contraseña) desde **Ajustes de cuenta**.
+
+## 9. Cómo probar SQLite
+
+SQLite es la persistencia local inmediata; Firebase sincroniza en segundo plano:
+
+1. **Offline-first:** activa el modo avión y repite flujos — agregar al carrito, crear un pedido, publicar o eliminar una reseña. Todo debe completarse localmente con mensajes de "guardado en tu dispositivo".
+2. **Persistencia:** cierra y reabre la app (o reinicia el teléfono); el carrito, pedidos, reseñas y perfil cacheado deben seguir ahí.
+3. **Sincronización:** quita el modo avión y espera unos segundos; los pedidos/reseñas pendientes se confirman solos y sus badges cambian de "pendiente" a sincronizado.
+4. **Sin duplicados:** cada pedido/reseña tiene un ID estable — reintentar la sincronización no crea registros dobles en Firebase.
+5. El esquema está documentado en `database/schema.sql`; el código lo crea y migra automáticamente en `src/infrastructure/data/sqliteDatabase.ts`.
+
+## 10. Cómo probar el consumo de API REST
+
+La app soporta un servicio REST opcional para catálogo y pedidos. Incluye un mock de desarrollo:
+
+```bash
+npm run mock:api
+```
+
+Corre en `http://localhost:8787` (`GET /catalog`, `PUT /orders/{id}`, `GET /health`). Para que la app lo use, agrega en `.env` según el destino:
+
+```env
+# Expo Go / web
+EXPO_PUBLIC_SKYNOVA_API_URL=http://localhost:8787
+# Emulador Android
+EXPO_PUBLIC_SKYNOVA_API_URL=http://10.0.2.2:8787
+# Teléfono físico en la misma red
+EXPO_PUBLIC_SKYNOVA_API_URL=http://<IP-LAN-del-equipo>:8787
+```
+
+Reinicia Expo después de cambiar la variable. El mock no tiene autenticación ni garantías de producción — no lo expongas a Internet ni uses datos reales. Sin la variable, la app usa el catálogo local/Firebase y la cola de pedidos sigue funcionando en SQLite.
+
+## 11. Cómo probar Firestore
+
+Firestore es el destino de sincronización (no hay Realtime Database en el proyecto):
+
+- **Auth:** los usuarios aparecen en Authentication → Users; el perfil se guarda en `users/{uid}`.
+- **Catálogo:** `categories`, `products`, `drone_specs`, `product_images` son de solo lectura para el cliente.
+- **Pedidos:** `orders/{orderId}` con `items` y `shipping_address`; el estado pasa de `pending` a `paid` y luego `cancelled` si se cancela.
+- **Reseñas:** `product_reviews/{productId}_{userId}` — una por usuario y producto.
+- **Carrito:** `carts/{userId}` con los items y `updated_at`.
+- **Direcciones:** `addresses/{addressId}`; la última usada queda como `is_default`.
+
+Para verificar: crea un pedido online, abre Firestore Console → colección `orders` y confirma que el documento existe con sus items. Repite offline y verifica que aparece tras recuperar la conexión. Revisa también que `firestore.rules` esté publicada.
+
+## 12. Cómo generar el binario y ejecutar en dispositivo/emulador
+
+**Android** — el proyecto incluye la carpeta `android/` generada, así que puedes compilar directo con Gradle:
+
+```powershell
+cd android
+.\gradlew.bat assembleDebug     # APK de desarrollo (~230 MB, necesita Metro)
+.\gradlew.bat assembleRelease   # APK release (~ligero, funciona solo)
+.\gradlew.bat bundleRelease     # AAB para Google Play (~app-release.aab)
+```
+
+Los artefactos quedan en `android/app/build/outputs/apk/debug/app-debug.apk`, `apk/release/app-release.apk` y `bundle/release/app-release.aab`.
+
+**iOS** — requiere macOS con Xcode. Como el proyecto usa Continuous Native Generation, primero genera la carpeta nativa y luego compila:
+
+```bash
+npx expo prebuild --platform ios
+npx expo run:ios                # compila e instala en el simulador
+```
+
+Para un dispositivo físico o TestFlight, genera el proyecto y ábrelo en Xcode (`ios/SkyNova.xcworkspace`), o usa EAS Build en la nube desde cualquier sistema:
+
+```bash
+npx eas-cli build --platform ios --profile production
+```
+
+- **Binario debug (Android):** al abrirlo necesita `npx expo start` corriendo y `adb reverse tcp:8081 tcp:8081` si usas USB. Sirve para iterar.
+- **Binario release (Android):** lleva el JS empaquetado — instálalo y funciona sin PC. Es el que se comparte para pruebas.
+- **Emuladores:** Android Studio (Device Manager) para Android; Xcode → simuladores para iOS, o Expo Go en ambos.
+- **Dispositivo físico:** copia el APK en Android (permite "instalar apps de orígenes desconocidos"); en iOS instala desde Xcode, TestFlight o Expo Go.
+
+## 13. Arquitectura: Clean Architecture
 
 El código separa las reglas del negocio de la interfaz y del almacenamiento:
 
 - `src/domain/`: entidades, contratos de repositorio y casos de uso; contiene las reglas centrales.
-- `src/infrastructure/`: repositorios SQLite, integración Firebase, contextos de estado y composición de dependencias.
+- `src/infrastructure/`: repositorios SQLite, integración Firebase/REST, contextos de estado y composición de dependencias.
 - `src/presentation/`: pantallas, componentes y formularios.
 - `src/app/`: rutas y navegación con Expo Router.
 - `src/shared/`: tema, validaciones y utilidades compartidas.
 
-La capa de dominio define contratos que la infraestructura implementa. SQLite proporciona persistencia local del catálogo, carrito y pedidos; Firebase Authentication gestiona credenciales y Firestore sincroniza perfiles y datos de usuario cuando se configura el proyecto. `database/schema.sql` documenta el modelo relacional; SQLite lo adapta a tipos y restricciones compatibles con el dispositivo.
+SQLite es la fuente inmediata (catálogo, carrito, pedidos, reseñas, perfil cacheado); Firebase Authentication gestiona credenciales y Firestore sincroniza datos; el REST opcional replica catálogo y pedidos. Las escrituras son idempotentes (IDs estables y upserts), así que reintentar una sincronización nunca duplica registros.
 
-## 8. Integrantes del grupo
+## 14. Integrantes del grupo
 
 1. Yalico Nicho, Joseph Alexander
 2. Gutierrez Chiara, Franklin Alberto

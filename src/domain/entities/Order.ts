@@ -41,7 +41,6 @@ export interface Order {
   paymentDetails?: OrderPaymentDetails;
   syncStatus?: 'pending' | 'synced' | 'error';
   syncError?: string;
-  receiptStoragePath?: string;
   currency: string;
   items: OrderItemSnapshot[];
   createdAt: string;

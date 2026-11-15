@@ -20,7 +20,7 @@ export async function getCatalogFromRest(): Promise<RestCatalog | null> {
   return value;
 }
 
-export async function syncOrderToRest(order: Order, receiptStoragePath?: string) {
+export async function syncOrderToRest(order: Order) {
   if (!apiBaseUrl) return;
   const response = await fetch(`${apiBaseUrl}/orders/${encodeURIComponent(order.id)}`, {
     method: 'PUT',
@@ -50,7 +50,6 @@ export async function syncOrderToRest(order: Order, receiptStoragePath?: string)
       currency: order.currency,
       created_at: order.createdAt,
       updated_at: order.updatedAt,
-      ...(receiptStoragePath ? { receipt_storage_path: receiptStoragePath } : {}),
     }),
   });
   if (!response.ok) throw new Error(`El servicio REST no pudo sincronizar el pedido (${response.status}).`);

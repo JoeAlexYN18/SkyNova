@@ -1,5 +1,4 @@
 import * as SQLite from 'expo-sqlite';
-import { File } from 'expo-file-system';
 import type { User } from '@/domain/entities/User';
 import { generateId } from '@/shared/utils/generateId';
 
@@ -135,8 +134,6 @@ CREATE TABLE IF NOT EXISTS orders (
   sync_status TEXT NOT NULL DEFAULT 'pending'
     CHECK (sync_status IN ('pending', 'synced', 'error')),
   sync_error TEXT,
-  receipt_local_uri TEXT,
-  receipt_storage_path TEXT,
   payment_method TEXT CHECK (payment_method IS NULL OR payment_method IN ('yape', 'visa')),
   currency TEXT NOT NULL CHECK (length(currency) = 3),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -199,14 +196,6 @@ export function getDatabase(): Promise<SQLite.SQLiteDatabase> {
         if (!existingColumns.has('sync_error')) {
           //noinspection SqlNoDataSourceInspection
           await database.execAsync('ALTER TABLE orders ADD COLUMN sync_error TEXT');
-        }
-        if (!existingColumns.has('receipt_local_uri')) {
-          //noinspection SqlNoDataSourceInspection
-          await database.execAsync('ALTER TABLE orders ADD COLUMN receipt_local_uri TEXT');
-        }
-        if (!existingColumns.has('receipt_storage_path')) {
-          //noinspection SqlNoDataSourceInspection
-          await database.execAsync('ALTER TABLE orders ADD COLUMN receipt_storage_path TEXT');
         }
         if (!existingColumns.has('payment_method')) {
           //noinspection SqlNoDataSourceInspection
@@ -303,19 +292,10 @@ export async function getCachedUserProfile(userId: string): Promise<User | null>
 
 export async function deleteLocalAccountData(userId: string) {
   const database = await getDatabase();
-  const receipts = await database.getAllAsync<{ receipt_local_uri: string | null }>(
-    'SELECT receipt_local_uri FROM orders WHERE user_id = ? AND receipt_local_uri IS NOT NULL',
-    userId,
-  );
   await withDatabaseTransaction(database, async () => {
     await database.runAsync('DELETE FROM orders WHERE user_id = ?', userId);
     await database.runAsync('DELETE FROM users WHERE id = ?', userId);
   });
-  for (const { receipt_local_uri: uri } of receipts) {
-    if (!uri?.startsWith('file://')) continue;
-    const receipt = new File(uri);
-    if (receipt.exists) receipt.delete();
-  }
 }
 
 export function withDatabaseTransaction(

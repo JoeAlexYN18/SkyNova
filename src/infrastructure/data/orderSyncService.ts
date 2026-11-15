@@ -9,8 +9,8 @@ export async function syncOrderToServices(order: Order) {
   if (!orderSyncConfigured) return undefined;
   if (firebaseConfigured) {
     await syncAddressToFirebase(order.shippingAddress);
-    await syncOrderToFirebase(order, order.receiptStoragePath);
+    await syncOrderToFirebase(order);
   }
-  if (restApiConfigured) await syncOrderToRest(order, order.receiptStoragePath);
+  if (restApiConfigured) await syncOrderToRest(order);
   return undefined;
 }

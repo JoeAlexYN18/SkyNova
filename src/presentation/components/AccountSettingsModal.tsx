@@ -347,8 +347,8 @@ function accountDeletionErrorMessage(error: unknown) {
   if (code === 'auth/requires-recent-login') {
     return 'Por seguridad, vuelve a iniciar sesión y repite la eliminación de tu cuenta.';
   }
-  if (code === 'permission-denied' || code === 'storage/unauthorized') {
-    return 'Firebase rechazó la eliminación. Publica las reglas actualizadas de Firestore y Storage e inténtalo de nuevo.';
+  if (code === 'permission-denied') {
+    return 'Firebase rechazó la eliminación. Publica las reglas actualizadas de Firestore e inténtalo de nuevo.';
   }
   return 'No se pudo eliminar tu cuenta. Inténtalo nuevamente.';
 }
