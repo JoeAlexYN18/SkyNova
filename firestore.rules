@@ -81,10 +81,6 @@ service cloud.firestore {
           || request.resource.data.payment_method in ['yape', 'visa'])
         && (request.resource.data.payment_method != 'yape'
           || request.resource.data.shipping_address.country_code == 'PE')
-        && (!('receipt_storage_path' in request.resource.data)
-          || request.resource.data.receipt_storage_path.matches(
-            'receipts/' + request.auth.uid + '/' + orderId + '/[^/]+'
-          ))
         && request.resource.data.keys().hasOnly([
           'id', 'user_id', 'shipping_address_id', 'shipping_address', 'status',
           'payment_method', 'payment_details', 'currency', 'created_at', 'updated_at',
@@ -103,10 +99,6 @@ service cloud.firestore {
           || request.resource.data.payment_method in ['yape', 'visa'])
         && (request.resource.data.payment_method != 'yape'
           || request.resource.data.shipping_address.country_code == 'PE')
-        && (!('receipt_storage_path' in request.resource.data)
-          || request.resource.data.receipt_storage_path.matches(
-            'receipts/' + request.auth.uid + '/' + orderId + '/[^/]+'
-          ))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'shipping_address_id', 'shipping_address', 'status', 'updated_at',
           'receipt_storage_path', 'payment_method', 'payment_details'

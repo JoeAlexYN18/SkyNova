@@ -25,6 +25,7 @@ async function handleRequest(request, response) {
   }
 
   const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
+  console.log(`${new Date().toISOString()} ${request.method} ${url.pathname}`);
   if (request.method === 'GET' && url.pathname === '/health') {
     sendJson(response, 200, { status: 'ok' });
     return;

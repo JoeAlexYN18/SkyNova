@@ -1,0 +1,32 @@
+{
+  "ord_mwimtbj9sr0ds4zz": {
+    "id": "ord_mwimtbj9sr0ds4zz",
+    "user_id": "Ltm5eHcF3BOsGIUdYcS0frhoqGo2",
+    "shipping_address": {
+      "recipient": "Miguel Eduardo Yalico Nicho",
+      "phone": "+51 996235142",
+      "line1": "Av. Bocanegra",
+      "city": "Lima",
+      "region": "Lima",
+      "postal_code": "15084",
+      "country_code": "PE"
+    },
+    "items": [
+      {
+        "product_id": "rest-accessory-001",
+        "product_name": "Batería de repuesto",
+        "sku": "SN-REST-ACC-001",
+        "quantity": 1,
+        "unit_price": 59
+      }
+    ],
+    "status": "paid",
+    "payment_method": "yape",
+    "payment_details": {
+      "phone": "+51 996235142"
+    },
+    "currency": "USD",
+    "created_at": "2026-11-16T02:15:55.557Z",
+    "updated_at": "2026-11-16T02:15:55.557Z"
+  }
+}
