@@ -2,9 +2,9 @@
 
 ## 1. Descripción del proyecto
 
-SkyNova es un prototipo móvil de una tienda especializada en drones. Inspirado en el comercio del sector hacia 2026, reúne drones para fotografía, vídeo y vuelo FPV con accesorios y repuestos específicos, como baterías, hélices y filtros. La idea es que cada persona pueda explorar el catálogo, revisar la información disponible y completar una compra desde el teléfono.
+SkyNova es un prototipo móvil de una tienda de drones. Está pensado como un e-commerce serio, no como una app de vuelo: el usuario explora el catálogo, ve la ficha de cada producto y completa la compra desde el teléfono.
 
-El objetivo del proyecto es mostrar ese recorrido de compra y la gestión posterior del pedido. SkyNova no es una app de vuelo, sino una demostración seria de comercio electrónico.
+El catálogo incluye drones para fotografía, vídeo y FPV, además de accesorios y repuestos como baterías, hélices y filtros. Después de comprar, el usuario puede seguir el estado de su pedido, cancelar si aún no se despacha y dejar reseñas de los productos.
 
 ## 2. Core de negocio elegido
 
@@ -19,7 +19,7 @@ El core es el comercio electrónico B2C de un proveedor especializado: conectar 
 
 ## 4. Instalación
 
-Desde la carpeta del proyecto —donde está `package.json`— instala las dependencias:
+Desde la carpeta del proyecto, donde está `package.json`, instala las dependencias:
 
 ```bash
 npm install
@@ -54,13 +54,13 @@ npx expo start
 Escanea el QR con Expo Go o abre un emulador/simulador y pulsa `a` (Android) o `i` (iOS) en la terminal. Para desarrollo nativo local:
 
 ```bash
-npx expo run:android   # Android — requiere Android Studio/JDK
-npx expo run:ios       # iOS — requiere macOS con Xcode
+npx expo run:android   # Android, requiere Android Studio/JDK
+npx expo run:ios       # iOS, requiere macOS con Xcode
 ```
 
 En Windows no es posible compilar localmente la versión de iOS; usa Expo Go, un simulador en una Mac o EAS Build.
 
-El catálogo de demostración se siembra en SQLite para el primer uso y como respaldo offline. Si Firestore tiene productos cargados desde un entorno administrativo, la app los descarga (`categories`, `products`, `drone_specs`, `product_images`, reseñas) y actualiza la caché; el catálogo no se edita desde el cliente. Las reseñas usan `product_reviews/{productId}_{userId}`; el carrito usa `carts/{userId}`; direcciones y pedidos se guardan en `addresses/{addressId}` y `orders/{orderId}`.
+El catálogo de demostración se siembra en SQLite en el primer uso y también sirve de respaldo offline. Si Firestore tiene productos cargados desde un entorno administrativo, la app los descarga (`categories`, `products`, `drone_specs`, `product_images`, reseñas) y actualiza la caché; el catálogo no se edita desde el cliente. Las reseñas usan `product_reviews/{productId}_{userId}`; el carrito usa `carts/{userId}`; direcciones y pedidos se guardan en `addresses/{addressId}` y `orders/{orderId}`.
 
 ## 7. Cómo probar el login
 
@@ -80,16 +80,16 @@ El CRUD visible para el usuario es el de **pedidos** (crear, consultar, actualiz
 4. Edita y guarda la dirección de entrega mientras el pedido esté pendiente o pagado para **actualizarlo**.
 5. **Cancela** el pedido desde su detalle: queda marcado como cancelado y sigue en el historial (borrado lógico). El stock se repone en el catálogo.
 
-También puedes **crear/editar/eliminar reseñas** en el detalle de cada producto y gestionarlas en **Perfil → Mis reseñas**; y **editar tu perfil** (nombre, correo, teléfono, contraseña) desde **Perfil → Datos de tu cuenta**.
+También puedes **crear, editar y eliminar reseñas** en el detalle de cada producto y gestionarlas en **Perfil → Mis reseñas**; y **editar tu perfil** (nombre, correo, teléfono, contraseña) desde **Perfil → Datos de tu cuenta**.
 
 ## 9. Cómo probar SQLite
 
 SQLite es la persistencia local inmediata; Firebase sincroniza en segundo plano:
 
-1. **Offline-first:** activa el modo avión y repite flujos — agregar al carrito, crear un pedido, publicar o eliminar una reseña. Todo debe completarse localmente con mensajes de "guardado en tu dispositivo".
+1. **Offline-first:** activa el modo avión y repite flujos (agregar al carrito, crear un pedido, publicar o eliminar una reseña). Todo debe completarse localmente con mensajes de "guardado en tu dispositivo".
 2. **Persistencia:** cierra y reabre la app (o reinicia el teléfono); el carrito, pedidos, reseñas y perfil cacheado deben seguir ahí.
-3. **Sincronización:** quita el modo avión y espera unos segundos; los pedidos/reseñas pendientes se confirman solos y sus badges cambian de "pendiente" a sincronizado.
-4. **Sin duplicados:** cada pedido/reseña tiene un ID estable — reintentar la sincronización no crea registros dobles en Firebase.
+3. **Sincronización:** quita el modo avión y espera unos segundos; los pedidos y reseñas pendientes se confirman solos y sus badges cambian de "pendiente" a sincronizado.
+4. **Sin duplicados:** cada pedido y reseña tiene un ID estable, así que reintentar la sincronización no crea registros dobles en Firebase.
 5. El esquema está documentado en `database/schema.sql`; el código lo crea y migra automáticamente en `src/infrastructure/data/sqliteDatabase.ts`.
 
 ## 10. Cómo probar el consumo de API REST
@@ -111,7 +111,7 @@ EXPO_PUBLIC_SKYNOVA_API_URL=http://10.0.2.2:8787
 EXPO_PUBLIC_SKYNOVA_API_URL=http://<IP-LAN-del-equipo>:8787
 ```
 
-Reinicia Expo después de cambiar la variable. El mock no tiene autenticación ni garantías de producción — no lo expongas a Internet ni uses datos reales. Sin la variable, la app usa el catálogo local/Firebase y la cola de pedidos sigue funcionando en SQLite.
+Reinicia Expo después de cambiar la variable. El mock no tiene autenticación ni garantías de producción: no lo expongas a Internet ni uses datos reales. Sin la variable, la app usa el catálogo local/Firebase y la cola de pedidos sigue funcionando en SQLite.
 
 ## 11. Cómo probar Firestore
 
@@ -120,7 +120,7 @@ Firestore es el destino de sincronización (no hay Realtime Database en el proye
 - **Auth:** los usuarios aparecen en Authentication → Users; el perfil se guarda en `users/{uid}`.
 - **Catálogo:** `categories`, `products`, `drone_specs`, `product_images` son de solo lectura para el cliente.
 - **Pedidos:** `orders/{orderId}` con `items` y `shipping_address`; se crean como `paid` (pago simulado, sin cobro real) y pueden pasar a `cancelled`.
-- **Reseñas:** `product_reviews/{productId}_{userId}` — una por usuario y producto.
+- **Reseñas:** `product_reviews/{productId}_{userId}`, una por usuario y producto.
 - **Carrito:** `carts/{userId}` con los items y `updated_at`.
 - **Direcciones:** `addresses/{addressId}`; la última usada queda como `is_default`.
 
@@ -128,7 +128,7 @@ Para verificar: crea un pedido online, abre Firestore Console → colección `or
 
 ## 12. Cómo generar el binario y ejecutar en dispositivo/emulador
 
-**Android** — la carpeta `android/` no se sube al repositorio (la genera Expo), así que primero créala con prebuild y luego compila con Gradle:
+**Android:** la carpeta `android/` no se sube al repositorio (la genera Expo), así que primero créala con prebuild y luego compila con Gradle:
 
 ```powershell
 npx expo prebuild --platform android   # genera android/ (solo la primera vez)
@@ -140,7 +140,7 @@ cd android
 
 Los artefactos quedan en `android/app/build/outputs/apk/debug/app-debug.apk`, `apk/release/app-release.apk` y `bundle/release/app-release.aab`.
 
-**iOS** — requiere macOS con Xcode. Como el proyecto usa Continuous Native Generation, primero genera la carpeta nativa y luego compila:
+**iOS:** requiere macOS con Xcode. Como el proyecto usa Continuous Native Generation, primero genera la carpeta nativa y luego compila:
 
 ```bash
 npx expo prebuild --platform ios
@@ -154,7 +154,7 @@ npx eas-cli build --platform ios --profile production
 ```
 
 - **Binario debug (Android):** al abrirlo necesita `npx expo start` corriendo y `adb reverse tcp:8081 tcp:8081` si usas USB. Sirve para iterar.
-- **Binario release (Android):** lleva el JS empaquetado — instálalo y funciona sin PC. Es el que se comparte para pruebas.
+- **Binario release (Android):** lleva el JS empaquetado, instálalo y funciona sin PC. Es el que se comparte para pruebas.
 - **Emuladores:** Android Studio (Device Manager) para Android; Xcode → simuladores para iOS, o Expo Go en ambos.
 - **Dispositivo físico:** copia el APK en Android (permite "instalar apps de orígenes desconocidos"); en iOS instala desde Xcode, TestFlight o Expo Go.
 
