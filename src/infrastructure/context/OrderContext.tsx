@@ -96,9 +96,6 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       const state = await Network.getNetworkStateAsync();
       if (!state.isConnected || state.isInternetReachable === false) return false;
       const storedOrders = await orderRepository.list(userId);
-      let failedSyncCount = 0;
-      let firstFailedOrderId: string | null = null;
-      let firstSyncError: unknown = null;
       for (const order of storedOrders) {
         if (order.syncStatus === 'synced') continue;
         try {
@@ -108,18 +105,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
           if (isAuthSessionError(error, userId)) break;
           const message = error instanceof Error ? error.message : 'No se pudo sincronizar el pedido.';
           await orderRepository.markOrderSyncError(order.id, userId, message);
-          failedSyncCount += 1;
-          firstFailedOrderId ??= order.id;
-          firstSyncError ??= error;
         }
-      }
-      if (failedSyncCount > 0 && !isExpectedSyncError(firstSyncError, userId)) {
-        show(
-          failedSyncCount === 1 && firstFailedOrderId
-            ? `Pedido #${firstFailedOrderId.slice(-8).toUpperCase()} guardado en tu dispositivo; lo confirmaremos automáticamente.`
-            : `${failedSyncCount} pedidos guardados en tu dispositivo; los confirmaremos automáticamente.`,
-          'error',
-        );
       }
       const refreshedOrders = await orderRepository.list(userId);
       setOrders((current) => [
@@ -127,10 +113,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         ...refreshedOrders,
       ]);
       return refreshedOrders.every((order) => order.syncStatus === 'synced');
-    } catch (error) {
-      if (!isExpectedSyncError(error, userId)) {
-        show('No se pudo revisar la cola de pedidos; se reintentará automáticamente.', 'info');
-      }
+    } catch {
       return false;
     } finally {
       syncingUsers.current.delete(userId);
@@ -138,7 +121,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         void Promise.resolve().then(() => retryOrderSyncRef.current(userId));
       }
     }
-  }, [show]);
+  }, []);
 
   useEffect(() => {
     retryOrderSyncRef.current = retryOrderSync;

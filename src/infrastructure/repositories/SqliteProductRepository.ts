@@ -425,7 +425,7 @@ export class SqliteProductRepository implements IProductRepository {
        VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?)
        ON CONFLICT(product_id, user_id) DO UPDATE SET
          rating = excluded.rating, review_text = excluded.review_text,
-         sync_status = 'pending', sync_error = NULL, is_deleted = 0, created_at = excluded.created_at`,
+         sync_status = 'pending', sync_error = NULL, is_deleted = 0`,
       reviewId,
       input.productId,
       input.userId,
@@ -643,7 +643,14 @@ export class SqliteProductRepository implements IProductRepository {
   private async loadCatalogUncached() {
     await this.ensureCatalogSeeded();
     const database = await getDatabase();
-    const categoryRows = await database.getAllAsync<CategoryRow>('SELECT * FROM categories ORDER BY name');
+    const categoryRows = await database.getAllAsync<CategoryRow>(
+      `SELECT c.* FROM categories c
+       WHERE EXISTS (
+         SELECT 1 FROM products p
+         WHERE p.category_id = c.id AND p.product_type = c.product_type AND p.is_active = 1
+       )
+       ORDER BY c.name`,
+    );
     const categories = categoryRows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -708,7 +715,8 @@ export class SqliteProductRepository implements IProductRepository {
     const remote = restApiConfigured
       ? await getCatalogFromRest()
       : await getCatalogFromFirebase();
-    if (!remote || remote.products.length === 0) return false;
+    const database = await getDatabase();
+    if (!remote || remote.products.length === 0) return this.restoreSeedCatalog(database);
     const now = new Date().toISOString();
     const remoteCategories = remote.categories.map((row) => ({
       id: row.id,
@@ -781,7 +789,6 @@ export class SqliteProductRepository implements IProductRepository {
       };
     });
     const remoteReviews = await getAllProductReviewsFromFirebase();
-    const database = await getDatabase();
     await withDatabaseTransaction(database, async () => {
       for (const category of remoteCategories) {
         await database.runAsync(
@@ -885,6 +892,36 @@ export class SqliteProductRepository implements IProductRepository {
     });
     invalidateProductCatalogCache();
     return true;
+  }
+
+  private async restoreSeedCatalog(database: SQLite.SQLiteDatabase): Promise<boolean> {
+    const seedIds = products.map((product) => product.id);
+    const placeholders = seedIds.map(() => '?').join(', ');
+    let changed = 0;
+    await withDatabaseTransaction(database, async () => {
+      for (const product of products) {
+        const isActive = product.isActive ? 1 : 0;
+        const isHomeVisible = product.isHomeVisible === false ? 0 : 1;
+        const result = await database.runAsync(
+          `UPDATE products SET is_active = ?, is_home_visible = ?
+           WHERE id = ? AND (is_active != ? OR is_home_visible != ?)`,
+          isActive,
+          isHomeVisible,
+          product.id,
+          isActive,
+          isHomeVisible,
+        );
+        changed += result.changes;
+      }
+      const result = await database.runAsync(
+        `UPDATE products SET is_active = 0, is_home_visible = 0
+         WHERE is_active != 0 AND id NOT IN (${placeholders})`,
+        ...seedIds,
+      );
+      changed += result.changes;
+    });
+    if (changed > 0) invalidateProductCatalogCache();
+    return changed > 0;
   }
 
   private async ensureCatalogSeeded() {

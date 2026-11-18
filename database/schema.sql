@@ -1,3 +1,6 @@
+-- Esquema de referencia (PostgreSQL) para un backend futuro.
+-- La app móvil NO lo usa: persiste en expo-sqlite local y sincroniza con Firebase/Firestore.
+
 
 CREATE TABLE users (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),

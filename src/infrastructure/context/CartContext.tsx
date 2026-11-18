@@ -215,7 +215,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       })));
     }).catch((error: unknown) => {
       if (!isExpectedSyncError(error, user.id)) {
-        show('No se pudo guardar el carrito; se usará la copia local.', 'info');
+        show('No se pudo sincronizar el carrito; se usará la copia local.', 'info');
       }
     });
   }, [carts, currentUser, lines, networkRevision, show]);

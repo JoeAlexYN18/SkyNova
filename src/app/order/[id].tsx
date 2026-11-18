@@ -13,7 +13,6 @@ import { useAuth } from '@/infrastructure/context/AuthContext';
 import { useOrders } from '@/infrastructure/context/OrderContext';
 import { useToast } from '@/infrastructure/context/ToastContext';
 import { CountryPickerModal } from '@/presentation/components/CountryPickerModal';
-import { useNetworkStatus } from '@/presentation/hooks/useNetworkStatus';
 import { colors, radius, spacing } from '@/shared/theme';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { getOrderDisplayState, getOrderSyncState, type OrderDisplayTone } from '@/shared/utils/orderDisplay';
@@ -77,7 +76,6 @@ export default function OrderDetailScreen() {
   const [address, setAddress] = useState<CheckoutInput | null>(null);
   const [busy, setBusy] = useState<'save' | 'cancel' | 'retry' | null>(null);
   const busyRef = useRef(false);
-  const isOnline = useNetworkStatus();
 
   const order = useMemo(() => orders.find((candidate) => candidate.id === id) ?? null, [orders, id]);
   const displayState = order ? getOrderDisplayState(order, orderSyncEnabled) : null;
@@ -178,34 +176,36 @@ export default function OrderDetailScreen() {
   };
 
   const handleCancelOrder = () => {
-    Alert.alert(
-      '¿Cancelar este pedido?',
-      isOnline
-        ? 'El pedido quedará registrado como cancelado.'
-        : 'El pedido se cancelará en tu dispositivo y se confirmará al recuperar la conexión.',
-      [
-        { text: 'Volver', style: 'cancel' },
-        {
-          text: 'Cancelar pedido',
-          style: 'destructive',
-          onPress: () => {
-            if (busyRef.current) return;
-            busyRef.current = true;
-            setBusy('cancel');
-            void cancelOrder(order.id, currentUser.id)
-              .then(async () => {
-                const offline = await isOfflineNow();
-                show(
-                  offline ? 'Pedido cancelado. Se confirmará al recuperar la conexión.' : 'Pedido cancelado.',
-                  'success',
-                );
-              })
-              .catch((error: unknown) => show(error instanceof Error ? error.message : 'No se pudo cancelar el pedido.', 'error'))
-              .finally(() => { busyRef.current = false; setBusy(null); });
+    void (async () => {
+      const offline = await isOfflineNow();
+      Alert.alert(
+        '¿Cancelar este pedido?',
+        offline
+          ? 'El pedido se cancelará en tu dispositivo y se confirmará al recuperar la conexión.'
+          : 'El pedido quedará registrado como cancelado.',
+        [
+          { text: 'Volver', style: 'cancel' },
+          {
+            text: 'Cancelar pedido',
+            style: 'destructive',
+            onPress: () => {
+              if (busyRef.current) return;
+              busyRef.current = true;
+              setBusy('cancel');
+              void cancelOrder(order.id, currentUser.id)
+                .then(() => {
+                  show(
+                    offline ? 'Pedido cancelado. Se confirmará al recuperar la conexión.' : 'Pedido cancelado.',
+                    'success',
+                  );
+                })
+                .catch((error: unknown) => show(error instanceof Error ? error.message : 'No se pudo cancelar el pedido.', 'error'))
+                .finally(() => { busyRef.current = false; setBusy(null); });
+            },
           },
-        },
-      ],
-    );
+        ],
+      );
+    })();
   };
 
   const handleRetrySync = () => {
@@ -265,12 +265,12 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
-        {order.status === 'cancelled' ? (
+        {order.status === 'cancelled' && syncState === 'synced' ? (
           <View style={styles.cancelledBanner}>
             <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.textMuted} />
             <Text style={styles.cancelledBannerText}>Este pedido fue cancelado.</Text>
           </View>
-        ) : syncState === 'synced' ? (
+        ) : order.status !== 'cancelled' && syncState === 'synced' ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Estado del pedido</Text>
             {TIMELINE_STEPS.map((label, index) => {

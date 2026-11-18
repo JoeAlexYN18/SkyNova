@@ -49,7 +49,7 @@ export function HomeScreen() {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [brands, setBrands] = useState<ProductBrand[]>([]);
   const [homeCollections, setHomeCollections] = useState<HomeProductCollections>({ featuredDrones: [], bestSellingAccessories: [] });
-  const scrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const [searchTransition] = useState(() => new Animated.Value(0));
   const [section, setSection] = useState<Section>('Inicio');
   const [catalogInitialFilters, setCatalogInitialFilters] = useState<CatalogInitialFilters>({});
@@ -64,6 +64,7 @@ export function HomeScreen() {
   const [isSearchSuggestionsVisible, setIsSearchSuggestionsVisible] = useState(false);
   const catalogSearchHandler = useRef<((query: string) => void) | null>(null);
   const searchDraftBeforeSearchMode = useRef('');
+  const reviewSyncNoticeShown = useRef(false);
 
   useEffect(() => {
     if (!isSearchMode) return;
@@ -233,9 +234,8 @@ export function HomeScreen() {
         if (active && !localCatalogFailed) {
           void hasNetworkConnection().then((online) => {
             if (!active || !online || isExpectedSyncError(error)) return;
-            show(error instanceof Error
-              ? `Se usará el catálogo local: ${error.message}`
-              : 'No se pudo sincronizar el catálogo; se usará la copia local.', 'info');
+            console.warn('No se pudo sincronizar el catálogo:', error);
+            show('No se pudo sincronizar el catálogo; se usará la copia local.', 'info');
           });
         }
       }
@@ -248,18 +248,13 @@ export function HomeScreen() {
     let syncError: unknown = null;
     void productRepository.syncPendingReviews((error) => {
       syncError ??= error;
-    }).then((count) => {
-      if (syncError !== null) {
-        if (!isExpectedSyncError(syncError)) {
-          show(
-            count > 0
-              ? 'Algunas reseñas se sincronizaron; las pendientes se reintentarán automáticamente.'
-              : 'No se pudieron publicar las reseñas pendientes; se reintentará automáticamente.',
-            'info',
-          );
-        }
-      } else if (count > 0) {
-        show('Tus reseñas pendientes ya están sincronizadas.', 'success');
+    }).then(() => {
+      if (syncError !== null && !isExpectedSyncError(syncError) && !reviewSyncNoticeShown.current) {
+        reviewSyncNoticeShown.current = true;
+        show(
+          'No se pudieron publicar las reseñas pendientes; se reintentará automáticamente.',
+          'info',
+        );
       }
     }).catch(() => {});
   }, [isOnline, currentUser?.id, show]);

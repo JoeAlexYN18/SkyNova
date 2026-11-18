@@ -42,8 +42,10 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
   useEffect(() => {
     if (!productId) return;
     let active = true;
+    let reviewsSyncFailed = false;
     productRepository.listReviews(productId, (error) => {
       console.warn('Sync de reseñas falló:', error);
+      reviewsSyncFailed = true;
       if (isExpectedSyncError(error, currentUser?.id)) return;
       show('No se pudieron actualizar las reseñas; se muestran las guardadas en este dispositivo.', 'info');
     }).then((result) => {
@@ -52,7 +54,7 @@ export function ProductDetailModal({ product, categories, onClose, onAdd, onBuyN
       setReviewsLoaded(true);
       const ownReview = result.find((review) => review.userId === currentUser?.id);
       const previous = previousOwnSync.current;
-      if (previous.productId === productId && previous.sync && previous.sync !== 'synced' && ownReview?.syncStatus === 'synced') {
+      if (!reviewsSyncFailed && previous.productId === productId && previous.sync && previous.sync !== 'synced' && ownReview?.syncStatus === 'synced') {
         show('Tu reseña ya está publicada.', 'success');
       }
       previousOwnSync.current = { productId, sync: ownReview?.syncStatus };

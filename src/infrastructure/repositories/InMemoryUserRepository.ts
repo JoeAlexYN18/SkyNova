@@ -9,6 +9,9 @@ import { EmailAlreadyRegisteredError } from '@/domain/errors/UserErrors';
 type StoredUser = User & { password: string };
 
 
+// Repositorio del modo demo (sin Firebase). Las cuentas viven solo en memoria:
+// al reiniciar la app se pierden, porque las contraseñas no se persisten
+// (el caché SQLite solo guarda el perfil, sin credenciales).
 export class InMemoryUserRepository implements IUserRepository {
   private users: StoredUser[] = [];
 

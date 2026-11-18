@@ -1,9 +1,10 @@
 import { FirebaseError } from 'firebase/app';
 import * as Network from 'expo-network';
-import { doc, deleteDoc, getDoc, getDocs, collection, query, setDoc, where, writeBatch } from 'firebase/firestore';
-import type { Order, OrderPaymentDetails, OrderStatus, ShippingAddressSnapshot } from '@/domain/entities/Order';
+import { doc, deleteDoc, getDoc, getDocs, collection, query, setDoc, where, writeBatch, type QueryDocumentSnapshot } from 'firebase/firestore';
+import type { Order, OrderStatus, ShippingAddressSnapshot } from '@/domain/entities/Order';
 import type { ProductReview } from '@/domain/entities/Product';
 import { firebaseConfigured, getFirebaseAuth, getFirebaseFirestore } from './firebaseServices';
+import { parseOrderPaymentDetails } from '@/shared/utils/paymentDetails';
 
 type FirebaseCatalogRecord = { id: string; [field: string]: unknown };
 
@@ -115,7 +116,7 @@ export async function getCartFromFirebase(userId: string) {
 }
 
 export async function syncAddressToFirebase(address: ShippingAddressSnapshot) {
-  if (!firebaseConfigured) return;
+  if (!firebaseConfigured || !(await hasNetworkConnection())) return;
   requireFirebaseUser(address.userId);
   const firestore = getFirebaseFirestore();
   const addressRef = doc(firestore, 'addresses', address.id);
@@ -290,7 +291,17 @@ export async function getOrdersFromFirebase(userId: string): Promise<Order[]> {
   );
   return snapshots.docs
     .map((snapshot): Order | null => {
-    try {
+      try {
+        return mapOrderSnapshot(snapshot, userId);
+      } catch (error) {
+        console.warn(`Se omitió el pedido ${snapshot.id}: ${error instanceof Error ? error.message : 'formato inválido'}.`);
+        return null;
+      }
+    })
+    .filter((order): order is Order => order !== null);
+}
+
+function mapOrderSnapshot(snapshot: QueryDocumentSnapshot, userId: string): Order {
     const data = snapshot.data();
     const address = data.shipping_address;
     if (
@@ -366,25 +377,6 @@ export async function getOrdersFromFirebase(userId: string): Promise<Order[]> {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    } catch (error) {
-      console.warn(`Se omitió el pedido ${snapshot.id}: ${error instanceof Error ? error.message : 'formato inválido'}.`);
-      return null;
-    }
-    })
-    .filter((order): order is Order => order !== null);
-}
-
-function parseOrderPaymentDetails(value: unknown): OrderPaymentDetails | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const details = value as Record<string, unknown>;
-  const result: OrderPaymentDetails = {};
-  if (typeof details.phone === 'string' && details.phone.trim()) result.phone = details.phone;
-  if (typeof details.cardholderName === 'string' && details.cardholderName.trim()) result.cardholderName = details.cardholderName;
-  if (details.cardBrand === 'visa' || details.cardBrand === 'mastercard' || details.cardBrand === 'amex'
-    || details.cardBrand === 'discover' || details.cardBrand === 'other') result.cardBrand = details.cardBrand;
-  if (typeof details.cardLast4 === 'string' && /^\d{4}$/.test(details.cardLast4)) result.cardLast4 = details.cardLast4;
-  if (typeof details.cardExpiry === 'string' && /^\d{2}\/\d{2}$/.test(details.cardExpiry)) result.cardExpiry = details.cardExpiry;
-  return Object.keys(result).length ? result : undefined;
 }
 
 function requiredString(value: unknown, field: string) {

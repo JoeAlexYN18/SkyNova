@@ -228,7 +228,9 @@ export function CartFeed({ onBrowseCatalog, onOpenProduct, onViewOrders }: Props
     setIsSubmitting(true);
     try {
       const networkState = await Network.getNetworkStateAsync().catch(() => null);
-      const offlinePurchase = !!networkState && !(networkState.isConnected && networkState.isInternetReachable !== false);
+      const offlinePurchase = networkState
+        ? !(networkState.isConnected && networkState.isInternetReachable !== false)
+        : !isOnline;
       const order = await checkoutOrder(currentUser, lines, {
         ...address,
         phone: `${selectedCountry.dialCode} ${address.phone.trim()}`,

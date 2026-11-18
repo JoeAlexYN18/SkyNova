@@ -4,6 +4,7 @@ import type { Order, OrderPaymentDetails, ShippingAddressSnapshot } from '@/doma
 import type { IOrderRepository, NewOrderInput, OrderUpdate } from '@/domain/repositories/IOrderRepository';
 import { getDatabase, withDatabaseTransaction } from '@/infrastructure/data/sqliteDatabase';
 import { generateId } from '@/shared/utils/generateId';
+import { parseOrderPaymentDetails } from '@/shared/utils/paymentDetails';
 import { getOrdersFromFirebase } from '@/infrastructure/data/firebaseDataSync';
 import { invalidateProductCatalogCache } from './SqliteProductRepository';
 
@@ -487,17 +488,7 @@ function serializePaymentDetails(details: OrderPaymentDetails | undefined) {
 function parsePaymentDetails(value: string | null): OrderPaymentDetails | undefined {
   if (!value) return undefined;
   try {
-    const parsed: unknown = JSON.parse(value);
-    if (typeof parsed !== 'object' || parsed === null) return undefined;
-    const details = parsed as Record<string, unknown>;
-    const result: OrderPaymentDetails = {};
-    if (typeof details.phone === 'string' && details.phone.trim()) result.phone = details.phone;
-    if (typeof details.cardholderName === 'string' && details.cardholderName.trim()) result.cardholderName = details.cardholderName;
-    if (details.cardBrand === 'visa' || details.cardBrand === 'mastercard' || details.cardBrand === 'amex'
-      || details.cardBrand === 'discover' || details.cardBrand === 'other') result.cardBrand = details.cardBrand;
-    if (typeof details.cardLast4 === 'string' && /^\d{4}$/.test(details.cardLast4)) result.cardLast4 = details.cardLast4;
-    if (typeof details.cardExpiry === 'string' && /^\d{2}\/\d{2}$/.test(details.cardExpiry)) result.cardExpiry = details.cardExpiry;
-    return Object.keys(result).length ? result : undefined;
+    return parseOrderPaymentDetails(JSON.parse(value));
   } catch {
     return undefined;
   }
